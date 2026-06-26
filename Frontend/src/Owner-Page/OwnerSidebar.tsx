@@ -11,10 +11,11 @@ import {
   Menu,
   Settings,
   UserRound,
-  Droplets,
+  Fish,
   Headphones,
   LogOut,
 } from 'lucide-react';
+import { useTranslation } from '../lib/i18n';
 
 const ownerNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,18 +40,20 @@ export default function OwnerSidebar({
   onNavigate: (page: string) => void;
   onLogout: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-col border-r border-[#0d3660] bg-[#031426]/95">
-      <div className="flex h-[92px] items-center gap-3 px-5">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-cyan-300/50 bg-cyan-300/10">
-          <Droplets className="h-8 w-8 text-cyan-300" />
+      <div className="flex h-[92px] items-center gap-3 px-5 border-b border-[#0d3660]">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: 'linear-gradient(135deg, #06b6d4, #0ea5e9)' }}
+        >
+          <Fish className="w-7 h-7 text-white" />
         </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-extrabold text-white">
-            AQUA <span className="text-cyan-300">PULSE</span>
-          </h1>
+        <div className="animate-slide-in-left">
+          <h1 className="text-xl font-bold text-white leading-tight">Aqua Pulse</h1>
+          <p className="text-xs text-[#06b6d4] -mt-0.5">Smart Aquaculture</p>
         </div>
-        <Menu className="ml-auto h-5 w-5 text-slate-300" />
       </div>
 
       <nav className="flex-1 space-y-2 px-3 py-3 overflow-y-auto">
@@ -69,7 +72,7 @@ export default function OwnerSidebar({
               }`}
             >
               <Icon className={`h-5 w-5 shrink-0 ${active ? 'text-cyan-300' : 'text-slate-200'}`} />
-              <span>{item.label}</span>
+              <span>{t(item.label)}</span>
               {item.badge && (
                 <span
                   className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${
@@ -91,8 +94,8 @@ export default function OwnerSidebar({
               <Headphones className="h-5 w-5 text-cyan-300" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white">Need Help?</p>
-              <p className="text-xs text-slate-300">Contact Support</p>
+              <p className="text-sm font-bold text-white">{t('Need Help?')}</p>
+              <p className="text-xs text-slate-300">{t('Contact Support')}</p>
             </div>
           </div>
         </div>
@@ -102,9 +105,10 @@ export default function OwnerSidebar({
           className="w-full flex h-[48px] items-center gap-4 rounded-lg px-4 text-left text-base font-medium text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition cursor-pointer"
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span>Sign Out</span>
+          <span>{t('Sign Out')}</span>
         </button>
       </div>
     </aside>
   );
 }
+

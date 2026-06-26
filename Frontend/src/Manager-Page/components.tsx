@@ -130,6 +130,7 @@ interface NotificationItem {
   id: string;
   type: 'critical' | 'warning' | 'info';
   message: string;
+  device: string;
   pond: string;
   time: string;
   read: boolean;
@@ -139,15 +140,17 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
   // Popover States
   const [showCalendar, setShowCalendar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('May 18, 2024');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  });
 
   // Notifications State
   const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: '1', type: 'critical', message: 'New Owner Registered', pond: 'Blue Lake Aquafarms', time: '10 min ago', read: false },
-    { id: '2', type: 'critical', message: 'Sensor Activation Failure', pond: 'DVC-003', time: '25 min ago', read: false },
-    { id: '3', type: 'warning', message: 'Suspicious login attempt', pond: 'Manager Portal', time: '1 hr ago', read: false },
-    { id: '4', type: 'warning', message: 'Database backup completed', pond: 'System Logs', time: '2 hr ago', read: false },
-    { id: '5', type: 'info', message: 'Weekly summary generated', pond: 'System Reports', time: '3 hr ago', read: false },
+    { id: '1', type: 'critical', message: 'New Owner Registered', device: 'SYS-OWNER', pond: 'Blue Lake Aquafarms', time: '10 min ago', read: false },
+    { id: '2', type: 'critical', message: 'Sensor Activation Failure', device: 'DVC-003', pond: 'Pond 3 Sensor', time: '25 min ago', read: false },
+    { id: '3', type: 'warning', message: 'Suspicious login attempt', device: 'SYS-AUTH', pond: 'Manager Portal', time: '1 hr ago', read: false },
+    { id: '4', type: 'warning', message: 'Database backup completed', device: 'SYS-DB', pond: 'System Logs', time: '2 hr ago', read: false },
+    { id: '5', type: 'info', message: 'Weekly summary generated', device: 'SYS-REP', pond: 'System Reports', time: '3 hr ago', read: false },
   ]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -197,13 +200,15 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
     setShowCalendar(false);
   };
 
-  const handleDaySelect = (day: number) => {
-    setSelectedDate(`May ${day}, 2024`);
-    setShowCalendar(false);
-  };
-
-  // Generate calendar days for May 2024
-  const daysInMay = Array.from({ length: 31 }, (_, i) => i + 1);
+  // Generate calendar days for current month/year dynamically
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonthIdx = today.getMonth();
+  const currentMonthName = today.toLocaleDateString('en-US', { month: 'short' });
+  
+  const daysInCurrentMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+  const firstDayIndex = new Date(currentYear, currentMonthIdx, 1).getDay();
+  const daysOfGrid = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
 
   return (
     <header className="flex h-[112px] items-center justify-between border-b border-[#0d3660] bg-[#031426]/80 px-10 backdrop-blur z-30 relative">
@@ -234,7 +239,9 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
             <div className="absolute right-0 mt-2 w-80 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-white">Select Date</span>
-                <span className="text-xs font-semibold text-cyan-400">May 2024</span>
+                <span className="text-xs font-semibold text-cyan-400">
+                  {today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </span>
               </div>
 
               {/* Date Presets */}
@@ -256,16 +263,19 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
                   <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
                 </div>
                 <div className="grid grid-cols-7 gap-1">
-                  {/* May 1st 2024 was a Wednesday, so 3 empty slots */}
-                  <span />
-                  <span />
-                  <span />
-                  {daysInMay.map((day) => {
-                    const isSelected = selectedDate === `May ${day}, 2024`;
+                  {/* Empty cells before the first day of the month */}
+                  {Array.from({ length: firstDayIndex }).map((_, idx) => (
+                    <span key={`empty-${idx}`} />
+                  ))}
+                  {daysOfGrid.map((day) => {
+                    const isSelected = selectedDate === `${currentMonthName} ${day}, ${currentYear}`;
                     return (
                       <button
                         key={day}
-                        onClick={() => handleDaySelect(day)}
+                        onClick={() => {
+                          setSelectedDate(`${currentMonthName} ${day}, ${currentYear}`);
+                          setShowCalendar(false);
+                        }}
                         className={`h-7 w-7 rounded text-xs font-semibold flex items-center justify-center transition ${isSelected ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20' : 'text-slate-300 hover:bg-[#071f35] hover:text-white'}`}
                       >
                         {day}
@@ -335,11 +345,12 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className={`text-xs font-semibold truncate ${notification.read ? 'text-slate-400' : 'text-white'}`}>
-                            {notification.message}
-                          </p>
+                          <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">{notification.device}</span>
                           <span className="text-[10px] text-slate-500 shrink-0">{notification.time}</span>
                         </div>
+                        <p className={`text-xs font-semibold truncate ${notification.read ? 'text-slate-400' : 'text-white'} mt-0.5`}>
+                          {notification.message}
+                        </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{notification.pond}</p>
                       </div>
                     </div>

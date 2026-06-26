@@ -16,6 +16,7 @@ import SettingsAddAgentPage from './SettingsAddAgentPage';
 import SitesPage from './SitesPage';
 import SosEmergencyPage from '../Agent-Page/SosEmergencyPage';
 import type { AuthSession } from '../lib/auth';
+import { useTranslation } from '../lib/i18n';
 
 const ownerPageTitles: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Dashboard', subtitle: 'Monitor your aquaculture operations and site performance.' },
@@ -37,6 +38,7 @@ const ownerPageTitles: Record<string, { title: string; subtitle: string }> = {
 export default function OwnerApp({ session, onLogout }: { session: AuthSession; onLogout: () => void }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const pageInfo = ownerPageTitles[currentPage] || ownerPageTitles.dashboard;
+  const { t } = useTranslation();
 
   return (
     <div className="flex min-h-screen bg-[#020b18]">
@@ -48,11 +50,12 @@ export default function OwnerApp({ session, onLogout }: { session: AuthSession; 
 
       <div className="flex flex-1 flex-col pl-[280px]">
         <Header
-          title={pageInfo.title}
-          subtitle={pageInfo.subtitle}
+          title={t(pageInfo.title)}
+          subtitle={t(pageInfo.subtitle)}
           user={session.user}
           onNavigate={setCurrentPage}
         />
+
 
         <main className="flex-1 overflow-auto px-8 pb-5 pt-2">
           <OwnerPageContent currentPage={currentPage} onNavigate={setCurrentPage} />

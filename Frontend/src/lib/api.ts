@@ -28,9 +28,14 @@ function buildUrl(path: string) {
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { token, headers, body, ...requestOptions } = options;
+
+  const formattedBody = body && typeof body === 'object' && !(body instanceof FormData)
+    ? JSON.stringify(body)
+    : body;
+
   const response = await fetch(buildUrl(path), {
     ...requestOptions,
-    body,
+    body: formattedBody,
     headers: {
       Accept: 'application/json',
       ...(body ? { 'Content-Type': 'application/json' } : {}),
@@ -38,6 +43,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       ...headers,
     },
   });
+
 
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await response.json() : await response.text();

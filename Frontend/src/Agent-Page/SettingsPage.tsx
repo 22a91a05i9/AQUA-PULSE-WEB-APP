@@ -21,13 +21,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
-
-const prefsItems = [
-  { label: 'Units', desc: 'Temperature: °C , pH , DO: mg/L', icon: Wrench },
-  { label: 'Language', desc: 'English', icon: MessageSquare },
-  { label: 'Dashboard Preferences', desc: 'Customize your dashboard view', icon: Image },
-  { label: 'Date & Time', desc: 'IST (UTC +05:30)', icon: Clock },
-];
+import { useTheme, useTranslation } from '../lib/i18n';
 
 const securityItems = [
   { label: 'Change Password', desc: 'Update your account password', icon: Lock },
@@ -41,8 +35,6 @@ const alertContacts = [
   { name: 'Arjun Mehta', email: 'arjun.mehta@aquapulse.com', phone: '+91 76543 21098', tag: null },
   { name: 'Sneha Reddy', email: 'sneha.reddy@aquapulse.com', phone: '+91 65432 10987', tag: null },
 ];
-
-
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
@@ -61,6 +53,8 @@ export default function SettingsPage() {
   const [alertMode, setAlertMode] = useState<'sms' | 'email'>('sms');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { theme, changeTheme } = useTheme();
+  const { t, lang, changeLanguage } = useTranslation();
 
   async function loadSettings() {
     try {
@@ -136,7 +130,7 @@ export default function SettingsPage() {
         {/* Profile & Account */}
         <div className="glass rounded-xl p-5 card-hover">
           <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Settings className="w-4 h-4" /> Profile & Account
+            <Settings className="w-4 h-4" /> {t('Profile & Account')}
           </h3>
           <button className="w-full flex items-center justify-between p-4 rounded-xl bg-[#071f35] hover:bg-[#0a2a47] transition-all group">
             <div className="flex items-center gap-4">
@@ -161,37 +155,58 @@ export default function SettingsPage() {
         {/* Preferences */}
         <div className="glass rounded-xl p-5 card-hover">
           <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Cpu className="w-4 h-4" /> Preferences
+            <Cpu className="w-4 h-4" /> {t('Preferences')}
           </h3>
-          <div className="space-y-1">
-            {prefsItems.map((item, i) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={i}
-                  className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-[#071f35] transition-all group animate-slide-in-up"
-                  style={{ animationDelay: `${i * 60}ms` }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#0d3660] flex items-center justify-center">
-                      <Icon className="w-4 h-4 text-[#22d3ee]" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-white">{item.label}</p>
-                      <p className="text-xs text-slate-400">{item.desc}</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-[#22d3ee] transition-colors" />
-                </button>
-              );
-            })}
+          <div className="space-y-4">
+            {/* Theme Selector */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-[#0d3660]/40 pb-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{t('Theme')}</p>
+                <p className="text-xs text-slate-400">Choose your application theme</p>
+              </div>
+              <div className="flex rounded-lg border border-[#0d3660] p-1 self-start md:self-auto bg-[#020b18]/60">
+                {(['Light', 'Dark', 'System'] as const).map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => changeTheme(item)}
+                    className={`h-8 rounded-md px-3.5 text-xs font-semibold ${theme === item ? 'bg-cyan-500/60 text-white' : 'text-slate-300 hover:bg-[#071f35]'}`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Language Selector */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-1">
+              <div>
+                <p className="text-sm font-semibold text-white">{t('Language')}</p>
+                <p className="text-xs text-slate-400">Select your preferred language</p>
+              </div>
+              <div className="flex rounded-lg border border-[#0d3660] p-1 self-start md:self-auto bg-[#020b18]/60">
+                {([
+                  { code: 'en', name: 'English' },
+                  { code: 'es', name: 'Español' },
+                  { code: 'fr', name: 'Français' },
+                  { code: 'te', name: 'తెలుగు' }
+                ] as const).map((item) => (
+                  <button
+                    key={item.code}
+                    onClick={() => changeLanguage(item.code)}
+                    className={`h-8 rounded-md px-3 text-xs font-semibold ${lang === item.code ? 'bg-cyan-500/60 text-white' : 'text-slate-300 hover:bg-[#071f35]'}`}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Security & Privacy */}
         <div className="glass rounded-xl p-5 card-hover">
           <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Shield className="w-4 h-4" /> Security & Privacy
+            <Shield className="w-4 h-4" /> {t('Security & Privacy')}
           </h3>
           <div className="space-y-1">
             {securityItems.map((item, i) => {
@@ -206,7 +221,7 @@ export default function SettingsPage() {
                       <Icon className="w-4 h-4 text-[#22d3ee]" />
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="text-sm font-medium text-white">{t(item.label)}</p>
                       <p className="text-xs text-slate-400">{item.desc}</p>
                     </div>
                   </div>
@@ -224,7 +239,7 @@ export default function SettingsPage() {
         {/* About */}
         <div className="glass rounded-xl p-5 card-hover">
           <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Info className="w-4 h-4" /> About
+            <Info className="w-4 h-4" /> {t('About')}
           </h3>
           <div className="flex items-center justify-between p-3 rounded-lg bg-[#071f35]">
             <div>
@@ -238,6 +253,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
 
       {/* Right Column */}
       <div className="space-y-5">

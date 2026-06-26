@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Fish,
 } from 'lucide-react';
+import { useTranslation } from '../lib/i18n';
 
 interface SidebarProps {
   currentPage: string;
@@ -39,6 +40,7 @@ const navItems = [
 export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, setCollapsed }: SidebarProps) {
   const [hovered, setHovered] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const { t } = useTranslation();
 
   const isCollapsed = collapsed && !hovered;
 
@@ -102,7 +104,7 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
               <Icon className={`w-5 h-5 shrink-0 transition-all ${isActive ? 'text-[#22d3ee]' : 'group-hover:text-[#22d3ee]'}`} />
               {!isCollapsed && (
                 <span className={`truncate transition-opacity duration-300 ${isCollapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
-                  {item.label}
+                  {t(item.label)}
                 </span>
               )}
               {item.badge && (
@@ -122,19 +124,20 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
       <div className="px-2 pb-4 space-y-1">
         <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-[#0a2a47]/50 transition-all">
           <HelpCircle className="w-5 h-5 shrink-0" />
-          {!isCollapsed && <span className="animate-slide-in-left">Need Help?</span>}
+          {!isCollapsed && <span className="animate-slide-in-left">{t('Need Help?')}</span>}
         </button>
         {!isCollapsed && (
-          <p className="text-[10px] text-slate-500 px-3 animate-slide-in-left">Contact Support</p>
+          <p className="text-[10px] text-slate-500 px-3 animate-slide-in-left">{t('Contact Support')}</p>
         )}
         <button
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all mt-2"
         >
           <LogOut className="w-5 h-5 shrink-0" />
-          {!isCollapsed && <span className="animate-slide-in-left">Sign Out</span>}
+          {!isCollapsed && <span className="animate-slide-in-left">{t('Sign Out')}</span>}
         </button>
       </div>
     </aside>
   );
 }
+

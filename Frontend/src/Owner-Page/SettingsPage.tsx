@@ -16,12 +16,14 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { useTheme, useTranslation } from '../lib/i18n';
 
 export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const session = getAuthSession();
   const [ownerData, setOwnerData] = useState<any>(session?.user || null);
   const [agentsList, setAgentsList] = useState<any[]>([]);
-  const [theme, setTheme] = useState<'Light' | 'Dark' | 'System'>('Dark');
+  const { theme, changeTheme } = useTheme();
+  const { t, lang, changeLanguage } = useTranslation();
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
     <div className="space-y-5 animate-fade-in">
       <section className="glass rounded-xl p-5">
         <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase text-white">
-          My Account <UserRound className="h-4 w-4 text-cyan-300" />
+          {t('My Account')} <UserRound className="h-4 w-4 text-cyan-300" />
         </h2>
         <button
           onClick={() => setMessage('Profile editor opened.')}
@@ -78,21 +80,21 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
 
       <section className="glass rounded-xl p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase text-white">My Account Team</h2>
+          <h2 className="text-sm font-bold uppercase text-white">{t('My Account Team')}</h2>
           <div className="flex gap-3">
             <button
               onClick={() => setMessage('Invite user flow opened.')}
               className="flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-300/10"
             >
               <UserPlus className="h-4 w-4" />
-              Invite User
+              {t('Invite User')}
             </button>
             <button
               onClick={onAddAgent}
               className="flex h-11 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-700 px-4 text-sm font-bold text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] transition hover:brightness-110"
             >
               <UserPlus className="h-4 w-4" />
-              Add Agent
+              {t('Add Agent')}
             </button>
           </div>
         </div>
@@ -118,18 +120,18 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
           )}
         </div>
         <button onClick={() => setMessage('Team agents list opened.')} className="mt-3 flex items-center gap-2 text-sm text-white">
-          View all team Agents <ArrowRight className="h-4 w-4" />
+          {t('View all team Agents')} <ArrowRight className="h-4 w-4" />
         </button>
       </section>
 
       <section className="glass rounded-xl p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase text-white">Preferences</h2>
-        <SettingRow icon={Briefcase} title="Theme" desc="Choose your application theme">
+        <h2 className="mb-3 text-sm font-bold uppercase text-white">{t('Preferences')}</h2>
+        <SettingRow icon={Briefcase} title={t('Theme')} desc="Choose your application theme">
           <div className="flex rounded-lg border border-[#0d3660] p-1">
             {(['Light', 'Dark', 'System'] as const).map((item) => (
               <button
                 key={item}
-                onClick={() => setTheme(item)}
+                onClick={() => changeTheme(item)}
                 className={`h-9 rounded-md px-5 text-sm font-semibold ${theme === item ? 'bg-cyan-500/60 text-white' : 'text-slate-300 hover:bg-[#071f35]'}`}
               >
                 {item}
@@ -137,20 +139,37 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
             ))}
           </div>
         </SettingRow>
-        <SettingRow icon={Briefcase} title="Units" desc="Select measurement units" value="Metric (deg C, mg/L)" />
-        <SettingRow icon={Globe2} title="Language" desc="Select your preferred language" value="English" />
-        <SettingRow icon={Globe2} title="Time Zone" desc="Select your current time zone" value="(GMT+05:30) Asia/Kolkata" />
+        <SettingRow icon={Briefcase} title={t('Units')} desc="Select measurement units" value="Metric (deg C, mg/L)" />
+        <SettingRow icon={Globe2} title={t('Language')} desc="Select your preferred language">
+          <div className="flex rounded-lg border border-[#0d3660] p-1">
+            {([
+              { code: 'en', name: 'English' },
+              { code: 'es', name: 'Español' },
+              { code: 'fr', name: 'Français' },
+              { code: 'te', name: 'తెలుగు' }
+            ] as const).map((item) => (
+              <button
+                key={item.code}
+                onClick={() => changeLanguage(item.code)}
+                className={`h-9 rounded-md px-3.5 text-xs font-semibold ${lang === item.code ? 'bg-cyan-500/60 text-white' : 'text-slate-300 hover:bg-[#071f35]'}`}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+        <SettingRow icon={Globe2} title={t('Time Zone')} desc="Select your current time zone" value="(GMT+05:30) Asia/Kolkata" />
       </section>
 
       <section className="glass rounded-xl p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase text-white">Account & Security</h2>
-        <SettingRow icon={LockKeyhole} title="Change Password" desc="Update your account password" />
-        <SettingRow icon={ShieldCheck} title="Two-Factor Authentication" desc="Add an extra layer of security" />
+        <h2 className="mb-3 text-sm font-bold uppercase text-white">{t('Account & Security')}</h2>
+        <SettingRow icon={LockKeyhole} title={t('Change Password')} desc="Update your account password" />
+        <SettingRow icon={ShieldCheck} title={t('Two-Factor Authentication')} desc="Add an extra layer of security" />
       </section>
 
       <section className="glass rounded-xl p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase text-white">About</h2>
-        <SettingRow icon={Info} title="App Version" value="v2.3.1" />
+        <h2 className="mb-3 text-sm font-bold uppercase text-white">{t('About')}</h2>
+        <SettingRow icon={Info} title={t('App Version')} value="v2.3.1" />
       </section>
 
       {message && <p className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{message}</p>}
@@ -172,7 +191,7 @@ function SettingRow({
   children?: React.ReactNode;
 }) {
   return (
-    <button className="flex w-full items-center gap-4 border-b border-[#0d3660]/70 py-4 text-left last:border-0">
+    <div className="flex w-full items-center gap-4 border-b border-[#0d3660]/70 py-4 text-left last:border-0">
       <Icon className="h-6 w-6 text-cyan-300" />
       <div className="flex-1">
         <p className="font-semibold text-white">{title}</p>
@@ -180,6 +199,7 @@ function SettingRow({
       </div>
       {children || <span className="text-sm text-slate-300">{value}</span>}
       {!children && <ChevronRight className="h-5 w-5 text-slate-300" />}
-    </button>
+    </div>
   );
 }
+

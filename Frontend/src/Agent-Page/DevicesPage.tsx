@@ -167,8 +167,8 @@ export default function DevicesPage() {
     );
   }
 
-  const devicesList: Device[] = data && data.devices && data.devices.length > 0
-    ? (data.devices).map((dev: any) => {
+  const devicesList: Device[] = data
+    ? (data.devices || []).map((dev: any) => {
         const site = (data?.assigned_sites || []).find((s: any) => s.id === dev.site_id);
         const pondName = site ? site.name : `Site #${dev.site_id}`;
 
@@ -764,75 +764,83 @@ export default function DevicesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
-                  {filteredDevices.map((dev) => (
-                    <tr
-                      key={dev.id}
-                      className="table-row-hover hover:bg-[#071f35]/30 cursor-pointer transition"
-                      onClick={() => {
-                        setSelectedDevice(dev);
-                        setActiveTab('overview');
-                      }}
-                    >
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full inline-block"
-                            style={{ backgroundColor: statusColors[dev.status] }}
-                          />
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#071f35] border border-slate-800 shrink-0">
-                            <Droplet className="w-4 h-4 text-[#06b6d4]" />
+                  {filteredDevices.length > 0 ? (
+                    filteredDevices.map((dev) => (
+                      <tr
+                        key={dev.id}
+                        className="table-row-hover hover:bg-[#071f35]/30 cursor-pointer transition"
+                        onClick={() => {
+                          setSelectedDevice(dev);
+                          setActiveTab('overview');
+                        }}
+                      >
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full inline-block"
+                              style={{ backgroundColor: statusColors[dev.status] }}
+                            />
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#071f35] border border-slate-800 shrink-0">
+                              <Droplet className="w-4 h-4 text-[#06b6d4]" />
+                            </div>
+                            <span className="font-semibold text-white">{dev.name}</span>
                           </div>
-                          <span className="font-semibold text-white">{dev.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 font-mono text-xs text-slate-400">{dev.id}</td>
-                      <td className="py-4 px-6 text-slate-400">{dev.type}</td>
-                      <td className="py-4 px-6 font-medium text-white">{dev.pondName}</td>
-                      <td className="py-4 px-6">
-                        <span
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
-                          style={{
-                            backgroundColor: statusColors[dev.status] + '20',
-                            color: statusColors[dev.status],
-                            border: `1px solid ${statusColors[dev.status]}30`,
-                          }}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full mr-1.5 animate-pulse" style={{ backgroundColor: statusColors[dev.status] }} />
-                          {dev.status}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-slate-400">{dev.lastSeen}</td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-1.5">
-                          {dev.battery !== null ? (
-                            <>
-                              <Battery className={`w-4 h-4 ${getBatteryColorClass(dev.battery, dev.status)}`} />
-                              <span className="font-semibold text-white">{dev.battery}%</span>
-                            </>
-                          ) : (
-                            <span className="text-slate-500">—</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedDevice(dev);
-                              setActiveTab('overview');
+                        </td>
+                        <td className="py-4 px-6 font-mono text-xs text-slate-400">{dev.id}</td>
+                        <td className="py-4 px-6 text-slate-400">{dev.type}</td>
+                        <td className="py-4 px-6 font-medium text-white">{dev.pondName}</td>
+                        <td className="py-4 px-6">
+                          <span
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
+                            style={{
+                              backgroundColor: statusColors[dev.status] + '20',
+                              color: statusColors[dev.status],
+                              border: `1px solid ${statusColors[dev.status]}30`,
                             }}
-                            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                            title="View Device Details"
                           >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-                        </div>
+                            <span className="w-1.5 h-1.5 rounded-full mr-1.5 animate-pulse" style={{ backgroundColor: statusColors[dev.status] }} />
+                            {dev.status}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-slate-400">{dev.lastSeen}</td>
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-1.5">
+                            {dev.battery !== null ? (
+                              <>
+                                <Battery className={`w-4 h-4 ${getBatteryColorClass(dev.battery, dev.status)}`} />
+                                <span className="font-semibold text-white">{dev.battery}%</span>
+                              </>
+                            ) : (
+                              <span className="text-slate-500">—</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedDevice(dev);
+                                setActiveTab('overview');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                              title="View Device Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                        No devices assigned to this agent.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -840,7 +848,7 @@ export default function DevicesPage() {
             {/* Pagination */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
               <div className="text-xs text-slate-400">
-                Showing 1 to {filteredDevices.length} of {devicesList.length} devices
+                Showing {filteredDevices.length === 0 ? 0 : 1} to {filteredDevices.length} of {devicesList.length} devices
               </div>
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">

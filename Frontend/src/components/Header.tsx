@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, CalendarDays, ChevronDown, RefreshCw, AlertTriangle, AlertCircle, CircleDot } from 'lucide-react';
 import type { AuthUser } from '../lib/auth';
+import { useTranslation } from '../lib/i18n';
 
 interface HeaderProps {
   title: string;
@@ -14,6 +15,7 @@ interface NotificationItem {
   id: string;
   type: 'critical' | 'warning' | 'info';
   message: string;
+  device: string;
   pond: string;
   time: string;
   read: boolean;
@@ -24,19 +26,22 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
     user.avatarUrl ||
     `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}&backgroundColor=0a2a47`;
   const roleLabel = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+  const { t } = useTranslation();
 
   // Popover States
   const [showCalendar, setShowCalendar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('May 18, 2024');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  });
 
   // Notifications State
   const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: '1', type: 'critical', message: 'pH level high', pond: 'Pond 03', time: '10 min ago', read: false },
-    { id: '2', type: 'critical', message: 'Low Dissolved Oxygen', pond: 'Pond 02', time: '25 min ago', read: false },
-    { id: '3', type: 'warning', message: 'High Turbidity', pond: 'Pond 01', time: '1 hr ago', read: false },
-    { id: '4', type: 'warning', message: 'Temperature high', pond: 'Pond 06', time: '2 hr ago', read: false },
-    { id: '5', type: 'info', message: 'Device battery low (20%)', pond: 'Pond 07', time: '3 hr ago', read: false },
+    { id: '1', type: 'critical', message: 'pH level high', device: 'AQ-DVC-003', pond: 'Pond 03', time: '10 min ago', read: false },
+    { id: '2', type: 'critical', message: 'Low Dissolved Oxygen', device: 'AQ-DVC-002', pond: 'Pond 02', time: '25 min ago', read: false },
+    { id: '3', type: 'warning', message: 'High Turbidity', device: 'AQ-DVC-001', pond: 'Pond 01', time: '1 hr ago', read: false },
+    { id: '4', type: 'warning', message: 'Temperature high', device: 'AQ-DVC-006', pond: 'Pond 06', time: '2 hr ago', read: false },
+    { id: '5', type: 'info', message: 'Device battery low (20%)', device: 'AQ-DVC-007', pond: 'Pond 07', time: '3 hr ago', read: false },
   ]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -86,18 +91,20 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
     setShowCalendar(false);
   };
 
-  const handleDaySelect = (day: number) => {
-    setSelectedDate(`May ${day}, 2024`);
-    setShowCalendar(false);
-  };
-
-  // Generate calendar days for May 2024
-  const daysInMay = Array.from({ length: 31 }, (_, i) => i + 1);
+  // Generate calendar days for current month/year
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonthIdx = today.getMonth();
+  const currentMonthName = today.toLocaleDateString('en-US', { month: 'short' });
+  
+  const daysInCurrentMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+  const firstDayIndex = new Date(currentYear, currentMonthIdx, 1).getDay();
+  const daysOfGrid = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
 
   return (
     <header className="flex min-h-[98px] items-center justify-between px-8 py-5 bg-[#020b18]/85 backdrop-blur-lg z-30 relative">
       <div>
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        <h1 className="text-2xl font-bold text-white">{t(title)}</h1>
         {subtitle && <p className="mt-1 text-[15px] text-slate-200">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-5">
@@ -118,7 +125,9 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
             <div className="absolute right-0 mt-2 w-80 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-white">Select Date</span>
-                <span className="text-xs font-semibold text-cyan-400">May 2024</span>
+                <span className="text-xs font-semibold text-cyan-400">
+                  {today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </span>
               </div>
 
               {/* Date Presets */}
@@ -140,16 +149,19 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
                   <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
                 </div>
                 <div className="grid grid-cols-7 gap-1">
-                  {/* May 1st 2024 was a Wednesday, so 3 empty slots */}
-                  <span />
-                  <span />
-                  <span />
-                  {daysInMay.map((day) => {
-                    const isSelected = selectedDate === `May ${day}, 2024`;
+                  {/* Empty cells before the first day of the month */}
+                  {Array.from({ length: firstDayIndex }).map((_, idx) => (
+                    <span key={`empty-${idx}`} />
+                  ))}
+                  {daysOfGrid.map((day) => {
+                    const isSelected = selectedDate === `${currentMonthName} ${day}, ${currentYear}`;
                     return (
                       <button
                         key={day}
-                        onClick={() => handleDaySelect(day)}
+                        onClick={() => {
+                          setSelectedDate(`${currentMonthName} ${day}, ${currentYear}`);
+                          setShowCalendar(false);
+                        }}
                         className={`h-7 w-7 rounded text-xs font-semibold flex items-center justify-center transition ${isSelected ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20' : 'text-slate-300 hover:bg-[#071f35] hover:text-white'}`}
                       >
                         {day}
@@ -180,7 +192,7 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
             <div className="absolute right-0 mt-2 w-96 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in">
               <div className="mb-3 flex items-center justify-between border-b border-[#0d3660]/60 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">Notifications</span>
+                  <span className="font-bold text-white text-sm">{t('Notifications')}</span>
                   {unreadCount > 0 && (
                     <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-300">
                       {unreadCount} new
@@ -219,11 +231,12 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className={`text-xs font-semibold truncate ${notification.read ? 'text-slate-400' : 'text-white'}`}>
-                            {notification.message}
-                          </p>
+                          <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">{notification.device}</span>
                           <span className="text-[10px] text-slate-500 shrink-0">{notification.time}</span>
                         </div>
+                        <p className={`text-xs font-semibold truncate ${notification.read ? 'text-slate-400' : 'text-white'} mt-0.5`}>
+                          {notification.message}
+                        </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{notification.pond}</p>
                       </div>
                     </div>
