@@ -1,0 +1,205 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px;
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      font-size: 17px;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    html {
+      font-size: 18px;
+    }
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #020b18;
+    color: #e2e8f0;
+    overflow-x: hidden;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #041526;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #0d3660;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #06b6d4;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(7, 31, 53, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+  }
+
+  .glass-dark {
+    background: rgba(4, 21, 38, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(6, 182, 212, 0.1);
+  }
+
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.25), 0 0 60px rgba(0, 212, 255, 0.1);
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #22d3ee, #3b82f6, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-ocean {
+    background: radial-gradient(ellipse at 30% 20%, #0a2a47 0%, #041526 40%, #020b18 100%);
+  }
+
+  .shimmer-border {
+    background: linear-gradient(90deg, transparent, rgba(0,212,255,0.2), transparent);
+    background-size: 200% 100%;
+  }
+
+  .nav-active {
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.1));
+    border-left: 3px solid #06b6d4;
+    color: #22d3ee;
+  }
+
+  .card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.15);
+    border-color: rgba(6, 182, 212, 0.3);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+    transition: all 0.3s ease;
+  }
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #0891b2, #0e7490);
+    box-shadow: 0 8px 30px rgba(6, 182, 212, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .toggle-on {
+    background: linear-gradient(135deg, #06b6d4, #0ea5e9);
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+  }
+
+  .status-healthy { color: #22c55e; }
+  .status-warning { color: #f59e0b; }
+  .status-critical { color: #ef4444; }
+  .status-offline { color: #6b7280; }
+}
+
+/* Underwater animated background */
+.underwater-bg {
+  background: radial-gradient(ellipse at 20% 10%, #0d3660 0%, #041526 35%, #020b18 70%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Fish SVG animations */
+.fish-group {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Water caustic light effect */
+.caustic-light {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,212,255,0.08) 0%, transparent 70%);
+  animation: caustic 8s ease-in-out infinite;
+}
+
+@keyframes caustic {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.4; }
+  33% { transform: scale(1.3) rotate(120deg); opacity: 0.6; }
+  66% { transform: scale(0.8) rotate(240deg); opacity: 0.3; }
+}
+
+/* Seaweed */
+.seaweed {
+  transform-origin: bottom center;
+}
+
+/* Gradient text shimmer */
+.shimmer-text {
+  background: linear-gradient(90deg, #22d3ee 0%, #60a5fa 25%, #22d3ee 50%, #a78bfa 75%, #22d3ee 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmerText 4s linear infinite;
+}
+
+@keyframes shimmerText {
+  0% { background-position: 100% center; }
+  100% { background-position: -100% center; }
+}
+
+/* Chart line styles */
+.chart-line-blue { stroke: #22d3ee; }
+.chart-line-green { stroke: #22c55e; }
+.chart-line-yellow { stroke: #f59e0b; }
+.chart-line-red { stroke: #ef4444; }
+
+/* Badge animation */
+.badge-pulse {
+  animation: badgePulse 2s ease-in-out infinite;
+}
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* Toggle switch */
+.toggle-switch {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Row hover */
+.table-row-hover {
+  transition: background 0.2s ease;
+}
+.table-row-hover:hover {
+  background: rgba(6, 182, 212, 0.05);
+}
+
+/* Donut chart center */
+.donut-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}

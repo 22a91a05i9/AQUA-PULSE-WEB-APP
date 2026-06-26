@@ -1,0 +1,144 @@
+{
+  "fish": {
+    "label": "Fish",
+    "species": {
+      "Rohu": {
+        "scientific_name": "Labeo rohita",
+        "thresholds": {
+          "ph": { "min": 6.5, "max": 8.5 },
+          "temperature_c": { "min": 24.0, "max": 32.0 },
+          "turbidity": { "min": 0.0, "max": 80.0 }
+        }
+      },
+      "Catla": {
+        "scientific_name": "Catla catla",
+        "thresholds": {
+          "ph": { "min": 6.5, "max": 8.5 },
+          "temperature_c": { "min": 24.0, "max": 32.0 },
+          "turbidity": { "min": 0.0, "max": 80.0 }
+        }
+      },
+      "Tilapia": {
+        "scientific_name": "Oreochromis niloticus",
+        "thresholds": {
+          "ph": { "min": 6.5, "max": 8.8 },
+          "temperature_c": { "min": 24.0, "max": 34.0 },
+          "turbidity": { "min": 0.0, "max": 100.0 }
+        }
+      },
+      "Pangasius": {
+        "scientific_name": "Pangasianodon hypophthalmus",
+        "thresholds": {
+          "ph": { "min": 6.5, "max": 8.2 },
+          "temperature_c": { "min": 24.0, "max": 32.0 },
+          "turbidity": { "min": 0.0, "max": 100.0 }
+        }
+      },
+      "Common Carp": {
+        "scientific_name": "Cyprinus carpio",
+        "thresholds": {
+          "ph": { "min": 6.5, "max": 8.5 },
+          "temperature_c": { "min": 20.0, "max": 30.0 },
+          "turbidity": { "min": 0.0, "max": 90.0 }
+        }
+      }
+    }
+  },
+  "prawn": {
+    "label": "Prawn",
+    "species": {
+      "Vannamei": {
+        "scientific_name": "Litopenaeus vannamei",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 27.0, "max": 32.0 },
+          "turbidity": { "min": 0.0, "max": 75.0 }
+        }
+      },
+      "Tiger Prawn": {
+        "scientific_name": "Penaeus monodon",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 26.0, "max": 30.0 },
+          "turbidity": { "min": 0.0, "max": 75.0 }
+        }
+      }
+    }
+  },
+  "crab": {
+    "label": "Crab",
+    "species": {
+      "Mud Crab": {
+        "scientific_name": "Scylla serrata",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 24.0, "max": 32.0 },
+          "turbidity": { "min": 0.0, "max": 100.0 }
+        }
+      }
+    }
+  },
+  "seashell": {
+    "label": "Seashell",
+    "species": {
+      "Oyster": {
+        "scientific_name": "Crassostrea gigas",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 18.0, "max": 30.0 },
+          "turbidity": { "min": 0.0, "max": 150.0 }
+        }
+      },
+      "Mussel": {
+        "scientific_name": "Mytilus edulis",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 15.0, "max": 28.0 },
+          "turbidity": { "min": 0.0, "max": 150.0 }
+        }
+      },
+      "Clam": {
+        "scientific_name": "Meretrix meretrix",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 20.0, "max": 30.0 },
+          "turbidity": { "min": 0.0, "max": 150.0 }
+        }
+      }
+    }
+  },
+  "seaweed": {
+    "label": "Seaweed",
+    "species": {
+      "Kappaphycus": {
+        "scientific_name": "Kappaphycus alvarezii",
+        "thresholds": {
+          "ph": { "min": 7.5, "max": 8.5 },
+          "temperature_c": { "min": 24.0, "max": 30.0 },
+          "turbidity": { "min": 0.0, "max": 60.0 }
+        }
+      },
+      "Gracilaria": {
+        "scientific_name": "Gracilaria verrucosa",
+        "thresholds": {
+          "ph": { "min": 7.0, "max": 8.5 },
+          "temperature_c": { "min": 22.0, "max": 30.0 },
+          "turbidity": { "min": 0.0, "max": 60.0 }
+        }
+      }
+    }
+  },
+  "other": {
+    "label": "Other",
+    "species": {
+      "Generic": {
+        "scientific_name": null,
+        "thresholds": {
+          "ph": { "min": 6.5, "max": 8.5 },
+          "temperature_c": { "min": 22.0, "max": 32.0 },
+          "turbidity": { "min": 0.0, "max": 90.0 }
+        }
+      }
+    }
+  }
+}
