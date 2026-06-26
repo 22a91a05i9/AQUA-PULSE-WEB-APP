@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Clock, Filter, MoreHorizontal, Plus, Search, UserRound, Users } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 interface Agent {
   id: string;
@@ -11,7 +13,13 @@ interface Agent {
   score: number;
 }
 
-const agents: Agent[] = [
+const statusClass: Record<Agent['status'], string> = {
+  Online: 'text-emerald-400',
+  Warning: 'text-amber-400',
+  Offline: 'text-red-400',
+};
+
+const defaultAgents: Agent[] = [
   { id: 'AG-001', name: 'Agent-001', site: 'North Farm', area: 'Area 1', status: 'Online', lastSeen: '2 min ago', score: 98 },
   { id: 'AG-004', name: 'Agent-002', site: 'East Zone', area: 'Area 1', status: 'Online', lastSeen: '5 min ago', score: 92 },
   { id: 'AG-008', name: 'Agent-003', site: 'Blue Farm', area: 'Area 1', status: 'Warning', lastSeen: '10 min ago', score: 72 },
@@ -22,36 +30,71 @@ const agents: Agent[] = [
   { id: 'AG-078', name: 'Agent-008', site: 'Lake View Farm', area: 'Area 2', status: 'Online', lastSeen: '4 min ago', score: 90 },
 ];
 
-const statusClass: Record<Agent['status'], string> = {
-  Online: 'text-emerald-400',
-  Warning: 'text-amber-400',
-  Offline: 'text-red-400',
-};
-
 export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
+  const [agentsList, setAgentsList] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All Status');
 
+  useEffect(() => {
+    async function fetchAgents() {
+      try {
+        const session = getAuthSession();
+        if (session) {
+          const res = await apiRequest<any[]>('/owner/agents', {
+            token: session.token,
+          });
+          const mappedAgents: Agent[] = res.map((a: any) => ({
+            id: `AG-${a.id}`,
+            name: a.full_name || 'Unnamed Agent',
+            site: a.farm_type_id ? `Site Type #${a.farm_type_id}` : 'General',
+            area: 'Area 1',
+            status: a.is_active ? 'Online' : 'Offline',
+            lastSeen: 'Just now',
+            score: 95,
+          }));
+          setAgentsList(mappedAgents);
+        }
+      } catch (err) {
+        console.error('Failed to load agents, using fallback defaults: ', err);
+        setAgentsList(defaultAgents);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAgents();
+  }, []);
+
   const filteredAgents = useMemo(() => {
-    return agents.filter((agent) => {
+    return agentsList.filter((agent) => {
       const matchesSearch = [agent.name, agent.site, agent.id, agent.area].some((value) =>
         value.toLowerCase().includes(search.toLowerCase()),
       );
       const matchesStatus = status === 'All Status' || agent.status === status;
       return matchesSearch && matchesStatus;
     });
-  }, [search, status]);
+  }, [search, status, agentsList]);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const activeCount = agentsList.filter((a) => a.status === 'Online').length;
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 animate-fade-in text-left">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <section className="glass rounded-xl p-6">
           <div className="flex items-center gap-5">
             <Users className="h-9 w-9 text-cyan-300" />
             <div>
               <p className="text-sm text-white">Total Agents</p>
-              <p className="mt-2 text-3xl font-extrabold text-white">24</p>
-              <p className="mt-1 text-sm text-emerald-400">15% vs last month</p>
+              <p className="mt-2 text-3xl font-extrabold text-white">{agentsList.length}</p>
+              <p className="mt-1 text-sm text-emerald-400">Registered in system</p>
             </div>
           </div>
         </section>
@@ -61,8 +104,8 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
               <Users className="h-9 w-9 text-cyan-300" />
               <div>
                 <p className="text-sm text-white">Active Agents</p>
-                <p className="mt-2 text-3xl font-extrabold text-white">18</p>
-                <p className="mt-1 text-sm text-emerald-400">9% vs last month</p>
+                <p className="mt-2 text-3xl font-extrabold text-white">{activeCount}</p>
+                <p className="mt-1 text-sm text-emerald-400">Online now</p>
               </div>
             </div>
             <div className="flex gap-3">
@@ -130,10 +173,10 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-300">Showing 1 to {filteredAgents.length} of 24 agents</p>
+        <p className="text-sm text-slate-300">Showing {filteredAgents.length} agents</p>
         <button
           onClick={onAddAgent}
-          className="flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white"
+          className="flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-500 transition cursor-pointer"
         >
           <Plus className="h-5 w-5" />
           Add New Agent

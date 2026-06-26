@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -15,6 +15,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 interface Site {
   id: string;
@@ -33,104 +35,7 @@ interface Site {
   email: string;
 }
 
-const initialSites: Site[] = [
-  {
-    id: 'GVF-001',
-    name: 'Green Valley Farm',
-    location: '123 Green Valley Rd, Coimbatore, Tamil Nadu',
-    region: 'South India',
-    ponds: 12,
-    devices: 28,
-    status: 'active',
-    lastUpdated: 'May 17, 2024 10:25 AM',
-    establishedOn: 'Mar 15, 2022',
-    siteType: 'Freshwater',
-    totalArea: '25 Acres',
-    operator: 'Rahul Verma',
-    contactNumber: '+91 98765 43210',
-    email: 'rahul.verma@example.com',
-  },
-  {
-    id: 'BLA-002',
-    name: 'Blue Lake Aquafarm',
-    location: '456 Lake Road, Nellore, Andhra Pradesh',
-    region: 'South India',
-    ponds: 8,
-    devices: 19,
-    status: 'active',
-    lastUpdated: 'May 17, 2024 09:45 AM',
-    establishedOn: 'Apr 10, 2022',
-    siteType: 'Brackish',
-    totalArea: '18 Acres',
-    operator: 'Priya Sharma',
-    contactNumber: '+91 98765 43211',
-    email: 'priya.sharma@example.com',
-  },
-  {
-    id: 'SAP-003',
-    name: 'Sunrise Aqua Park',
-    location: '789 Sunrise Blvd, Kolkata, West Bengal',
-    region: 'East India',
-    ponds: 15,
-    devices: 32,
-    status: 'active',
-    lastUpdated: 'May 17, 2024 09:20 AM',
-    establishedOn: 'Jan 15, 2023',
-    siteType: 'Freshwater',
-    totalArea: '35 Acres',
-    operator: 'Arjun Mehta',
-    contactNumber: '+91 98765 43212',
-    email: 'arjun.mehta@example.com',
-  },
-  {
-    id: 'OCF-004',
-    name: 'Oceanic Fisheries',
-    location: '321 Ocean Drive, Visakhapatnam, AP',
-    region: 'South India',
-    ponds: 10,
-    devices: 22,
-    status: 'active',
-    lastUpdated: 'May 16, 2024 04:30 PM',
-    establishedOn: 'Jun 20, 2022',
-    siteType: 'Marine',
-    totalArea: '22 Acres',
-    operator: 'Sneha Reddy',
-    contactNumber: '+91 98765 43213',
-    email: 'sneha.reddy@example.com',
-  },
-  {
-    id: 'MVF-005',
-    name: 'Mountain View Farm',
-    location: '654 Hill Top Road, Shimla, Himachal Pradesh',
-    region: 'North India',
-    ponds: 6,
-    devices: 12,
-    status: 'inactive',
-    lastUpdated: 'May 16, 2024 02:15 PM',
-    establishedOn: 'Nov 05, 2022',
-    siteType: 'Freshwater',
-    totalArea: '12 Acres',
-    operator: 'Vikram Kumar',
-    contactNumber: '+91 98765 43214',
-    email: 'vikram.kumar@example.com',
-  },
-  {
-    id: 'CAH-006',
-    name: 'Coastal Aqua Hub',
-    location: '987 Coastal Highway, Puri, Odisha',
-    region: 'East India',
-    ponds: 5,
-    devices: 10,
-    status: 'critical',
-    lastUpdated: 'May 16, 2024 11:30 AM',
-    establishedOn: 'Feb 18, 2023',
-    siteType: 'Brackish',
-    totalArea: '10 Acres',
-    operator: 'Rajesh Patel',
-    contactNumber: '+91 98765 43215',
-    email: 'rajesh.patel@example.com',
-  },
-];
+
 
 const statusColors: Record<string, string> = {
   active: '#22c55e',
@@ -143,8 +48,71 @@ export default function SitesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [regionFilter, setRegionFilter] = useState('all');
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const filteredSites = initialSites.filter((site) => {
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const session = getAuthSession();
+        if (session) {
+          const res = await apiRequest<any>('/agent/overview', {
+            token: session.token,
+          });
+          setData(res);
+        }
+      } catch (err) {
+        console.error('Failed to load agent overview:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const sitesList: Site[] = (data?.assigned_sites || []).map((site: any) => {
+    const siteDevices = (data?.devices || []).filter((d: any) => d.site_id === site.id);
+    const siteAlerts = (data?.alerts || []).filter((a: any) => a.site_id === site.id && a.status === 'open');
+    
+    let status: 'active' | 'inactive' | 'critical' = 'active';
+    if (siteAlerts.some((a: any) => a.severity === 'critical')) {
+      status = 'critical';
+    } else if (siteDevices.length === 0 || siteDevices.every((d: any) => d.status === 'inactive' || d.status === 'offline')) {
+      status = 'inactive';
+    }
+
+    const siteReadings = (data?.recent_readings || []).filter((r: any) => r.site_id === site.id);
+    const lastUpdated = siteReadings.length > 0 
+      ? new Date(siteReadings[0].collected_at).toLocaleString() 
+      : 'No readings yet';
+
+    return {
+      id: site.id.toString(),
+      name: site.name,
+      location: site.location_text || 'Unknown Location',
+      region: 'South India',
+      ponds: 1, 
+      devices: siteDevices.length,
+      status,
+      lastUpdated,
+      establishedOn: 'N/A',
+      siteType: site.site_type || 'Freshwater',
+      totalArea: 'N/A',
+      operator: 'Assigned Agent',
+      contactNumber: 'N/A',
+      email: 'N/A',
+    };
+  });
+
+  const filteredSites = sitesList.filter((site) => {
     const matchesSearch =
       site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       site.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -294,7 +262,7 @@ export default function SitesPage() {
         {/* Pagination */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
           <div className="text-xs text-slate-400">
-            Showing 1 to {filteredSites.length} of {initialSites.length} sites
+            Showing 1 to {filteredSites.length} of {sitesList.length} sites
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">

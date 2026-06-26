@@ -1,34 +1,9 @@
 import { apiRequest } from './api';
-import { config, hasApiBaseUrl } from './config';
+import { hasApiBaseUrl } from './config';
 
 const AUTH_STORAGE_KEY = 'aqua-pulse-auth';
-const DEMO_PASSWORD = '123';
 
 export type UserRole = 'agent' | 'manager' | 'owner';
-
-const demoUsers: Record<string, AuthUser> = {
-  'agent@gmail.com': {
-    id: 'agent-demo-user',
-    name: 'Agent User',
-    email: 'agent@gmail.com',
-    role: 'agent',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=agent&backgroundColor=0a2a47',
-  },
-  'manager@gmail.com': {
-    id: 'manager-demo-user',
-    name: 'Manager User',
-    email: 'manager@gmail.com',
-    role: 'manager',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=manager&backgroundColor=0a2a47',
-  },
-  'owner@gmail.com': {
-    id: 'owner-demo-user',
-    name: 'Owner User',
-    email: 'owner@gmail.com',
-    role: 'owner',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner&backgroundColor=0a2a47',
-  },
-};
 
 export interface LoginCredentials {
   email: string;
@@ -51,6 +26,7 @@ export interface AuthSession {
 interface BackendLoginResponse {
   token?: string;
   accessToken?: string;
+  access_token?: string;
   user?: Partial<AuthUser>;
 }
 
@@ -65,35 +41,22 @@ function normalizeRole(role: unknown): UserRole {
 }
 
 function normalizeLoginResponse(response: BackendLoginResponse, email: string): AuthSession {
-  const token = response.token || response.accessToken;
+  const token = response.token || response.accessToken || response.access_token;
 
   if (!token) {
     throw new Error('Login response did not include token or accessToken.');
   }
 
+  const user = response.user || ({} as any);
   return {
     token,
     user: {
-      id: response.user?.id || email,
-      name: response.user?.name || email.split('@')[0] || 'User',
-      email: response.user?.email || email,
-      role: normalizeRole(response.user?.role),
-      avatarUrl: response.user?.avatarUrl,
+      id: user.id || email,
+      name: user.full_name || user.name || email.split('@')[0] || 'User',
+      email: user.email || email,
+      role: normalizeRole(user.role),
+      avatarUrl: user.avatarUrl,
     },
-  };
-}
-
-function createMockSession(credentials: LoginCredentials): AuthSession {
-  const email = credentials.email.trim().toLowerCase();
-  const user = demoUsers[email];
-
-  if (!user || credentials.password !== DEMO_PASSWORD) {
-    throw new Error('Use agent@gmail.com, manager@gmail.com, or owner@gmail.com with password 123.');
-  }
-
-  return {
-    token: `mock-${user.role}-token`,
-    user,
   };
 }
 
@@ -129,10 +92,8 @@ export function clearAuthSession() {
 }
 
 export async function login(credentials: LoginCredentials): Promise<AuthSession> {
-  if (!hasApiBaseUrl() && config.enableMockAuth) {
-    const session = createMockSession(credentials);
-    saveAuthSession(session);
-    return session;
+  if (!hasApiBaseUrl()) {
+    throw new Error('API server URL is not configured. Set VITE_API_BASE_URL in your .env file.');
   }
 
   const response = await apiRequest<BackendLoginResponse>('/auth/login', {

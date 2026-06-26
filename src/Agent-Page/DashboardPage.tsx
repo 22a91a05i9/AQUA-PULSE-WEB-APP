@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Waves,
   Wifi,
@@ -13,47 +13,10 @@ import {
   Wind,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, YAxis } from 'recharts';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
-const statsData = [
-  { label: 'Total Ponds', value: 24, icon: Waves, color: '#22d3ee', subtext: '6 Healthy', subColor: '#22c55e' },
-  { label: 'Devices Online', value: 24, icon: Wifi, color: '#34d399', subtext: '96% Online', subColor: '#34d399' },
-  { label: 'Total Alerts', value: 128, icon: AlertCircle, color: '#f59e0b', subtext: '15 New', subColor: '#f59e0b' },
-  { label: 'Critical Alerts', value: 8, icon: AlertTriangle, color: '#ef4444', subtext: 'Immediate action', subColor: '#ef4444' },
-  { label: 'Water Quality Score', value: 85, icon: Droplets, color: '#22d3ee', subtext: 'Good', subColor: '#22c55e' },
-];
 
-const pondStatus = [
-  { id: 'P01', name: 'Pond 01', status: 'warning', x: 25, y: 30 },
-  { id: 'P02', name: 'Pond 02', status: 'critical', x: 55, y: 25 },
-  { id: 'P03', name: 'Pond 03', status: 'healthy', x: 80, y: 35 },
-  { id: 'P04', name: 'Pond 04', status: 'healthy', x: 20, y: 60 },
-  { id: 'P05', name: 'Pond 05', status: 'warning', x: 45, y: 55 },
-  { id: 'P06', name: 'Pond 06', status: 'healthy', x: 75, y: 65 },
-  { id: 'P07', name: 'Pond 07', status: 'healthy', x: 35, y: 80 },
-  { id: 'P08', name: 'Pond 08', status: 'critical', x: 65, y: 85 },
-];
-
-const alerts = [
-  { type: 'critical', message: 'pH level high', pond: 'Pond 03', time: '10 min ago', icon: Droplet },
-  { type: 'critical', message: 'Low Dissolved Oxygen', pond: 'Pond 02', time: '25 min ago', icon: Wind },
-  { type: 'warning', message: 'High Turbidity', pond: 'Pond 01', time: '1 hr ago', icon: Droplet },
-  { type: 'warning', message: 'Temperature high', pond: 'Pond 06', time: '2 hr ago', icon: Thermometer },
-  { type: 'info', message: 'Device battery low (20%)', pond: 'Pond 07', time: '3 hr ago', icon: CircleDot },
-];
-
-const deviceStatus = [
-  { label: 'Online', value: 24, color: '#22c55e', percent: 75 },
-  { label: 'Warning', value: 5, color: '#f59e0b', percent: 16 },
-  { label: 'Offline', value: 2, color: '#ef4444', percent: 6 },
-  { label: 'Maintenance', value: 1, color: '#6b7280', percent: 3 },
-];
-
-const waterQuality = [
-  { label: 'Temperature', value: '28.1', unit: '°C', status: 'Normal', color: '#22c55e', sparkline: [28, 28.2, 27.8, 28.1, 28.5, 28.1, 28.3] },
-  { label: 'pH', value: '8.9', unit: '', status: 'High', color: '#ef4444', sparkline: [8.2, 8.4, 8.5, 8.7, 8.9, 8.9, 8.8] },
-  { label: 'Dissolved Oxygen', value: '3.2', unit: 'mg/L', status: 'Low', color: '#f59e0b', sparkline: [4.2, 3.8, 3.5, 3.2, 3.2, 3.4, 3.2] },
-  { label: 'Turbidity', value: '120', unit: 'NTU', status: 'High', color: '#ef4444', sparkline: [80, 90, 100, 110, 115, 118, 120] },
-];
 
 const statusColors: Record<string, string> = {
   healthy: '#22c55e',
@@ -84,16 +47,181 @@ const pageMap: Record<string, string> = {
 
 export default function DashboardPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const [hoveredPond, setHoveredPond] = useState<string | null>(null);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAgentOverview() {
+      try {
+        const session = getAuthSession();
+        if (session) {
+          const res = await apiRequest<any>('/agent/overview', {
+            token: session.token,
+          });
+          setData(res);
+        }
+      } catch (err) {
+        console.error('Failed to connect to Agent overview API:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAgentOverview();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const totalSites = data?.assigned_sites ? data.assigned_sites.length : 0;
+  const onlineDevices = data?.devices ? data.devices.filter((d: any) => d.status === 'active' || d.status === 'online').length : 0;
+  const activeAlerts = data?.alerts ? data.alerts.filter((a: any) => a.status === 'open').length : 0;
+  const criticalAlertsCount = data?.alerts ? data.alerts.filter((a: any) => a.severity === 'critical' && a.status === 'open').length : 0;
+
+  // Compute average Water Quality Score based on readings (normally 0-100)
+  let waterQualityScore = 85;
+  const recentReadings = data?.recent_readings || [];
+  if (recentReadings.length > 0) {
+    let scoreSum = 0;
+    recentReadings.slice(0, 5).forEach((r: any) => {
+      let rScore = 100;
+      if (r.ph < 6.5 || r.ph > 8.5) rScore -= 20;
+      if (r.temperature_c < 20 || r.temperature_c > 35) rScore -= 20;
+      if (r.turbidity > 150) rScore -= 30;
+      scoreSum += rScore;
+    });
+    waterQualityScore = Math.round(scoreSum / Math.min(recentReadings.length, 5));
+  }
+
+  const statsData = [
+    { label: 'Total Ponds', value: totalSites, icon: Waves, color: '#22d3ee', subtext: 'Active assignments', subColor: '#22c55e' },
+    { label: 'Devices Online', value: onlineDevices, icon: Wifi, color: '#34d399', subtext: `${onlineDevices} active in field`, subColor: '#34d399' },
+    { label: 'Total Alerts', value: activeAlerts, icon: AlertCircle, color: '#f59e0b', subtext: 'Awaiting inspection', subColor: '#f59e0b' },
+    { label: 'Critical Alerts', value: criticalAlertsCount, icon: AlertTriangle, color: '#ef4444', subtext: 'Immediate action', subColor: '#ef4444' },
+    { label: 'Water Quality Score', value: waterQualityScore, icon: Droplets, color: '#22d3ee', subtext: waterQualityScore >= 80 ? 'Good' : 'Needs attention', subColor: waterQualityScore >= 80 ? '#22c55e' : '#f59e0b' },
+  ];
+
+  const getCoordinates = (index: number) => {
+    const coords = [
+      { x: 25, y: 30 },
+      { x: 55, y: 25 },
+      { x: 80, y: 35 },
+      { x: 20, y: 60 },
+      { x: 45, y: 55 },
+      { x: 75, y: 65 },
+      { x: 35, y: 80 },
+      { x: 65, y: 85 },
+    ];
+    return coords[index % coords.length];
+  };
+
+  const pondStatus = (data?.assigned_sites || []).map((site: any, idx: number) => {
+    const siteAlerts = (data?.alerts || []).filter((a: any) => a.site_id === site.id && a.status === 'open');
+    let status = 'healthy';
+    if (siteAlerts.some((a: any) => a.severity === 'critical')) {
+      status = 'critical';
+    } else if (siteAlerts.some((a: any) => a.severity === 'warning')) {
+      status = 'warning';
+    }
+    const coords = getCoordinates(idx);
+    return {
+      id: site.id.toString(),
+      name: site.name,
+      status,
+      x: coords.x,
+      y: coords.y,
+    };
+  });
+
+  const healthyCount = pondStatus.filter((p: any) => p.status === 'healthy').length;
+  const warningCount = pondStatus.filter((p: any) => p.status === 'warning').length;
+  const criticalCount = pondStatus.filter((p: any) => p.status === 'critical').length;
+  const offlineCount = (data?.devices || []).filter((d: any) => d.status === 'offline' || d.status === 'inactive').length;
 
   const statusSummary = [
-    { label: 'Healthy', count: 14, color: '#22c55e' },
-    { label: 'Warning', count: 6, color: '#f59e0b' },
-    { label: 'Critical', count: 4, color: '#ef4444' },
-    { label: 'Offline', count: 0, color: '#6b7280' },
+    { label: 'Healthy', count: healthyCount, color: '#22c55e' },
+    { label: 'Warning', count: warningCount, color: '#f59e0b' },
+    { label: 'Critical', count: criticalCount, color: '#ef4444' },
+    { label: 'Offline', count: offlineCount, color: '#6b7280' },
+  ];
+
+  const alerts = data?.alerts && data.alerts.length > 0
+    ? data.alerts.map((a: any) => ({
+        type: a.severity || 'warning',
+        message: a.title || a.message || 'Water quality alert',
+        pond: `Site ID #${a.site_id}`,
+        time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }))
+    : [];
+
+  const devicesList = data?.devices || [];
+  const totalDevs = devicesList.length;
+  const activeDevs = devicesList.filter((d: any) => d.status === 'active' || d.status === 'online').length;
+  const warningDevs = devicesList.filter((d: any) => d.status === 'warning').length;
+  const offlineDevs = devicesList.filter((d: any) => d.status === 'offline' || d.status === 'inactive').length;
+  const maintenanceDevs = devicesList.filter((d: any) => d.status === 'maintenance').length;
+
+  const deviceStatus = [
+    { label: 'Online', value: activeDevs, color: '#22c55e', percent: totalDevs ? Math.round((activeDevs / totalDevs) * 100) : 0 },
+    { label: 'Warning', value: warningDevs, color: '#f59e0b', percent: totalDevs ? Math.round((warningDevs / totalDevs) * 100) : 0 },
+    { label: 'Offline', value: offlineDevs, color: '#6b7280', percent: totalDevs ? Math.round((offlineDevs / totalDevs) * 100) : 0 },
+    { label: 'Maintenance', value: maintenanceDevs, color: '#a855f7', percent: totalDevs ? Math.round((maintenanceDevs / totalDevs) * 100) : 0 },
+  ];
+
+  // Dynamic water quality metrics
+  const latestReading = recentReadings[0];
+  const wqSparkline = (key: string, defaultVals: number[]) => {
+    if (recentReadings.length === 0) return defaultVals;
+    return recentReadings.slice(0, 10).reverse().map((r: any) => r[key]);
+  };
+
+  const getDOValue = (temp: number) => {
+    return Number((8.5 - (temp - 20) * 0.15).toFixed(1));
+  };
+
+  const waterQuality = [
+    {
+      label: 'Temperature',
+      value: latestReading ? latestReading.temperature_c.toFixed(1) : '28.1',
+      unit: '°C',
+      status: latestReading ? (latestReading.temperature_c < 20 || latestReading.temperature_c > 35 ? 'Critical' : 'Normal') : 'Normal',
+      color: latestReading ? (latestReading.temperature_c < 20 || latestReading.temperature_c > 35 ? '#ef4444' : '#22c55e') : '#22c55e',
+      sparkline: wqSparkline('temperature_c', [28, 28.2, 27.8, 28.1, 28.5, 28.1, 28.3]),
+    },
+    {
+      label: 'pH',
+      value: latestReading ? latestReading.ph.toFixed(1) : '8.9',
+      unit: '',
+      status: latestReading ? (latestReading.ph < 6.5 || latestReading.ph > 8.5 ? 'High' : 'Normal') : 'High',
+      color: latestReading ? (latestReading.ph < 6.5 || latestReading.ph > 8.5 ? '#ef4444' : '#22c55e') : '#ef4444',
+      sparkline: wqSparkline('ph', [8.2, 8.4, 8.5, 8.7, 8.9, 8.9, 8.8]),
+    },
+    {
+      label: 'Dissolved Oxygen',
+      value: latestReading ? getDOValue(latestReading.temperature_c).toString() : '3.2',
+      unit: 'mg/L',
+      status: latestReading ? (getDOValue(latestReading.temperature_c) < 4.0 ? 'Low' : 'Normal') : 'Low',
+      color: latestReading ? (getDOValue(latestReading.temperature_c) < 4.0 ? '#f59e0b' : '#22c55e') : '#f59e0b',
+      sparkline: recentReadings.length > 0 
+        ? recentReadings.slice(0, 10).reverse().map((r: any) => getDOValue(r.temperature_c))
+        : [4.2, 3.8, 3.5, 3.2, 3.2, 3.4, 3.2],
+    },
+    {
+      label: 'Turbidity',
+      value: latestReading ? latestReading.turbidity.toFixed(0) : '120',
+      unit: 'NTU',
+      status: latestReading ? (latestReading.turbidity > 150 ? 'Critical' : latestReading.turbidity > 100 ? 'High' : 'Normal') : 'High',
+      color: latestReading ? (latestReading.turbidity > 150 ? '#ef4444' : latestReading.turbidity > 100 ? '#f59e0b' : '#22c55e') : '#ef4444',
+      sparkline: wqSparkline('turbidity', [80, 90, 100, 110, 115, 118, 120]),
+    },
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-left">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {statsData.map((stat, i) => {
@@ -197,26 +325,30 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
             </button>
           </div>
           <div className="space-y-3">
-            {alerts.map((alert, i) => {
-              const Icon = alertIcons[alert.type] || AlertCircle;
-              return (
-                <div
-                  key={i}
-                  onClick={() => onNavigate?.('alerts')}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-[#071f35]/50 hover:bg-[#071f35] transition-all animate-slide-in-up cursor-pointer hover:border-amber-500/20"
-                  style={{ animationDelay: `${i * 100}ms` }}
-                >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: alertColors[alert.type] + '20' }}>
-                    <Icon className="w-4 h-4" style={{ color: alertColors[alert.type] }} />
+            {alerts.length === 0 ? (
+              <p className="text-sm text-slate-400 py-6 text-center">No active alerts found.</p>
+            ) : (
+              alerts.slice(0, 5).map((alert: any, i: number) => {
+                const Icon = alertIcons[alert.type] || AlertCircle;
+                return (
+                  <div
+                    key={i}
+                    onClick={() => onNavigate?.('alerts')}
+                    className="flex items-start gap-3 p-3 rounded-lg bg-[#071f35]/50 hover:bg-[#071f35] transition-all animate-slide-in-up cursor-pointer hover:border-amber-500/20"
+                    style={{ animationDelay: `${i * 100}ms` }}
+                  >
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: (alertColors[alert.type] || '#f59e0b') + '20' }}>
+                      <Icon className="w-4 h-4" style={{ color: alertColors[alert.type] || '#f59e0b' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{alert.message}</p>
+                      <p className="text-xs text-slate-400">{alert.pond}</p>
+                    </div>
+                    <span className="text-xs text-slate-500 shrink-0">{alert.time}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{alert.message}</p>
-                    <p className="text-xs text-slate-400">{alert.pond}</p>
-                  </div>
-                  <span className="text-xs text-slate-500 shrink-0">{alert.time}</span>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       </div>
@@ -247,7 +379,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-white">32</span>
+                <span className="text-2xl font-bold text-white">{onlineDevices}</span>
                 <span className="text-[10px] text-slate-400">Total Devices</span>
               </div>
             </div>
@@ -256,7 +388,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
                 <div key={d.label} className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
                   <span className="text-sm text-slate-300 flex-1">{d.label}</span>
-                  <span className="text-sm font-medium text-white">{d.value}</span>
+                  <span className="text-sm font-medium text-white">{d.label === 'Online' ? onlineDevices : d.value}</span>
                   <span className="text-xs text-slate-400 w-10">{d.percent}%</span>
                 </div>
               ))}

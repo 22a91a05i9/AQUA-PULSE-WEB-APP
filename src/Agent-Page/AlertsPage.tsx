@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Search,
   Eye,
@@ -9,11 +9,15 @@ import {
   Download,
   Calendar,
   Filter,
+  Check,
+  ShieldAlert,
 } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 interface AlertItem {
   id: string;
-  severity: 'Critical' | 'High' | 'Medium';
+  severity: string;
   message: string;
   details: string;
   device: string;
@@ -21,137 +25,98 @@ interface AlertItem {
   pond: string;
   zone: string;
   time: string;
-  status: 'Active' | 'Unacknowledged' | 'Resolved';
+  status: string;
 }
 
-const initialAlerts: AlertItem[] = [
-  {
-    id: 'ALT-0001',
-    severity: 'Critical',
-    message: 'Low Dissolved Oxygen',
-    details: 'DO level has dropped below threshold (< 3.0 mg/L)',
-    device: 'DEV-001',
-    deviceType: 'DO Sensor',
-    pond: 'Pond 07',
-    zone: 'North Zone',
-    time: 'May 18, 2024 10:15:23 AM',
-    status: 'Active',
-  },
-  {
-    id: 'ALT-0002',
-    severity: 'Critical',
-    message: 'High Turbidity',
-    details: 'Turbidity level has exceeded safe limit (> 50 NTU)',
-    device: 'DEV-002',
-    deviceType: 'Turbidity Sensor',
-    pond: 'Pond 02',
-    zone: 'Central Zone',
-    time: 'May 18, 2024 09:47:11 AM',
-    status: 'Active',
-  },
-  {
-    id: 'ALT-0003',
-    severity: 'Critical',
-    message: 'pH Level Low',
-    details: 'pH level is below recommended range (< 6.5)',
-    device: 'DEV-003',
-    deviceType: 'pH Sensor',
-    pond: 'Pond 03',
-    zone: 'West Zone',
-    time: 'May 18, 2024 09:25:48 AM',
-    status: 'Active',
-  },
-  {
-    id: 'ALT-0004',
-    severity: 'High',
-    message: 'Temperature Spike',
-    details: 'Temperature is above the threshold (> 32°C)',
-    device: 'DEV-004',
-    deviceType: 'Temperature Sensor',
-    pond: 'Pond 01',
-    zone: 'North Zone',
-    time: 'May 18, 2024 08:55:31 AM',
-    status: 'Unacknowledged',
-  },
-  {
-    id: 'ALT-0005',
-    severity: 'High',
-    message: 'Ammonia Level High',
-    details: 'Ammonia level is above the threshold (> 0.5 mg/L)',
-    device: 'DEV-005',
-    deviceType: 'Ammonia Sensor',
-    pond: 'Pond 05',
-    zone: 'Central Zone',
-    time: 'May 18, 2024 08:16:42 AM',
-    status: 'Unacknowledged',
-  },
-  {
-    id: 'ALT-0006',
-    severity: 'Medium',
-    message: 'Water Level Low',
-    details: 'Water level in the pond is too low',
-    device: 'DEV-006',
-    deviceType: 'Water Level Sensor',
-    pond: 'Pond 04',
-    zone: 'West Zone',
-    time: 'May 18, 2024 07:40:59 AM',
-    status: 'Resolved',
-  },
-  {
-    id: 'ALT-0007',
-    severity: 'Medium',
-    message: 'Device Offline',
-    details: 'Device has been offline for more than 15 minutes',
-    device: 'DEV-007',
-    deviceType: 'pH Sensor',
-    pond: 'Pond 03',
-    zone: 'West Zone',
-    time: 'May 18, 2024 07:12:01 AM',
-    status: 'Active',
-  },
-  {
-    id: 'ALT-0008',
-    severity: 'Medium',
-    message: 'Battery Low',
-    details: 'Device battery level is below 20%',
-    device: 'DEV-008',
-    deviceType: 'pH Sensor',
-    pond: 'Pond 02',
-    zone: 'Central Zone',
-    time: 'May 18, 2024 06:45:44 AM',
-    status: 'Resolved',
-  },
-];
-
 const severityColors: Record<string, string> = {
-  Critical: '#ef4444',
-  High: '#f59e0b',
-  Medium: '#eab308',
+  critical: '#ef4444',
+  warning: '#f59e0b',
+  info: '#3b82f6',
+  safe: '#10b981',
 };
 
 const statusColors: Record<string, string> = {
-  Active: '#ef4444',
-  Unacknowledged: '#f59e0b',
-  Resolved: '#10b981',
+  open: '#ef4444',
+  acknowledged: '#f59e0b',
+  resolved: '#10b981',
+  safe: '#10b981',
 };
 
 export default function AlertsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'devices'>('all');
+  const [alertsList, setAlertsList] = useState<AlertItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredAlerts = initialAlerts.filter((alert) => {
+  async function loadAlerts() {
+    try {
+      const session = getAuthSession();
+      if (session) {
+        const res = await apiRequest<any[]>('/readings/alerts/me', {
+          token: session.token,
+        });
+        
+        const mapped = res.map((a: any) => ({
+          id: a.id.toString(),
+          severity: a.severity || 'warning',
+          message: a.title || 'Water Quality Alert',
+          details: a.message || `Metric ${a.metric} went out of bounds (value: ${a.actual_value})`,
+          device: `Device #${a.device_id}`,
+          deviceType: a.metric ? `${a.metric} Sensor` : 'Sensor',
+          pond: `Site #${a.site_id}`,
+          zone: 'Standard Zone',
+          time: new Date(a.created_at).toLocaleString(),
+          status: a.status || 'open',
+        }));
+        setAlertsList(mapped);
+      }
+    } catch (err) {
+      console.error('Failed to load alerts:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAlerts();
+  }, []);
+
+  const handleVerifyAlert = async (alertId: string) => {
+    try {
+      const session = getAuthSession();
+      if (session) {
+        await apiRequest<any>(`/agent/alerts/${alertId}/verify`, {
+          method: 'POST',
+          token: session.token,
+        });
+        loadAlerts();
+      }
+    } catch (err) {
+      console.error('Failed to verify alert:', err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const filteredAlerts = alertsList.filter((alert) => {
     const matchesSearch =
       alert.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
       alert.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
       alert.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       alert.device.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesSeverity = severityFilter === 'all' || alert.severity === severityFilter;
+    const matchesSeverity = severityFilter === 'all' || alert.severity.toLowerCase() === severityFilter.toLowerCase();
     
     let matchesTab = true;
     if (activeTab === 'active') {
-      matchesTab = alert.status === 'Active' || alert.status === 'Unacknowledged';
+      matchesTab = alert.status === 'open' || alert.status === 'acknowledged';
     } else if (activeTab === 'devices') {
       matchesTab = alert.deviceType.toLowerCase().includes('sensor');
     }
@@ -179,7 +144,7 @@ export default function AlertsPage() {
               activeTab === 'active' ? 'border-[#06b6d4] text-white' : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            12 Alerts
+            {alertsList.filter(a => a.status === 'open' || a.status === 'acknowledged').length} Active
           </button>
           <button
             onClick={() => setActiveTab('devices')}
@@ -228,9 +193,9 @@ export default function AlertsPage() {
           className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]"
         >
           <option value="all">All Severities</option>
-          <option value="Critical">Critical</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
+          <option value="critical">Critical</option>
+          <option value="warning">Warning</option>
+          <option value="info">Info</option>
         </select>
 
         <select className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]">
@@ -308,6 +273,15 @@ export default function AlertsPage() {
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center justify-center gap-2">
+                      {alert.status !== 'safe' && alert.status !== 'resolved' && (
+                        <button
+                          onClick={() => handleVerifyAlert(alert.id)}
+                          className="p-1.5 rounded-lg hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 transition"
+                          title="Verify as Safe"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      )}
                       <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
                         <Eye className="w-4 h-4" />
                       </button>
@@ -325,7 +299,7 @@ export default function AlertsPage() {
         {/* Pagination */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
           <div className="text-xs text-slate-400">
-            Showing 1 to {filteredAlerts.length} of {initialAlerts.length} alerts
+            Showing 1 to {filteredAlerts.length} of {alertsList.length} alerts
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">

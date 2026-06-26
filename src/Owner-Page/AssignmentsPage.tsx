@@ -1,58 +1,139 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, Cpu, MapPin, Settings, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 const initialAssignments = {
-  device: '',
-  deviceSite: '',
-  agentSite: '',
-  agent: '',
+  deviceId: '',
+  deviceSiteId: '',
+  agentSiteId: '',
+  agentUserId: '',
 };
 
 export default function AssignmentsPage() {
   const [form, setForm] = useState(initialAssignments);
   const [message, setMessage] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [devices, setDevices] = useState<any[]>([]);
+  const [sites, setSites] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadData() {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+
+      const res = await apiRequest<any>('/owner/overview', {
+        token: session.token,
+      });
+
+      setDevices(res.devices || []);
+      setSites(res.sites || []);
+      setAgents(res.agents || []);
+    } catch (err) {
+      console.error('Failed to load assignments overview data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const updateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
     setMessage('');
+    setErrorMsg('');
   };
 
-  const assignDevice = () => {
-    if (!form.device || !form.deviceSite) {
-      setMessage('Select a device and site before assigning the device.');
+  const assignDevice = async () => {
+    if (!form.deviceId || !form.deviceSiteId) {
+      setErrorMsg('Select a device and site before assigning.');
       return;
     }
 
-    setMessage(`${form.device} assigned to ${form.deviceSite}.`);
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+
+      await apiRequest(`/owner/devices/${form.deviceId}/assign-site`, {
+        method: 'POST',
+        token: session.token,
+        body: {
+          site_id: Number(form.deviceSiteId),
+        },
+      });
+
+      const dev = devices.find(d => String(d.id) === form.deviceId);
+      const site = sites.find(s => String(s.id) === form.deviceSiteId);
+      setMessage(`Device "${dev?.device_uid || form.deviceId}" assigned to site "${site?.name || form.deviceSiteId}" successfully.`);
+      setErrorMsg('');
+      setForm(prev => ({ ...prev, deviceId: '', deviceSiteId: '' }));
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || 'Failed to assign device.');
+    }
   };
 
-  const assignAgent = () => {
-    if (!form.agentSite || !form.agent) {
-      setMessage('Select a site and agent before assigning the agent.');
+  const assignAgent = async () => {
+    if (!form.agentSiteId || !form.agentUserId) {
+      setErrorMsg('Select a site and agent before assigning.');
       return;
     }
 
-    setMessage(`${form.agent} assigned to ${form.agentSite}.`);
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+
+      await apiRequest(`/owner/sites/${form.agentSiteId}/assign-agent`, {
+        method: 'POST',
+        token: session.token,
+        body: {
+          agent_user_id: Number(form.agentUserId),
+        },
+      });
+
+      const agent = agents.find(a => String(a.id) === form.agentUserId);
+      const site = sites.find(s => String(s.id) === form.agentSiteId);
+      setMessage(`Agent "${agent?.full_name || form.agentUserId}" assigned to site "${site?.name || form.agentSiteId}" successfully.`);
+      setErrorMsg('');
+      setForm(prev => ({ ...prev, agentSiteId: '', agentUserId: '' }));
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || 'Failed to assign agent.');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-left">
       <AssignmentPanel title="Assign Device To Site">
         <SelectLike
           icon={Cpu}
           label="Device"
-          value={form.device}
-          onChange={(value) => updateField('device', value)}
-          options={['DVC-001 - Aquasense Pro', 'DVC-003 - Water Quality Monitor', 'DVC-007 - pH Sensor']}
+          value={form.deviceId}
+          onChange={(value) => updateField('deviceId', value)}
+          options={devices.map(d => ({ value: String(d.id), label: `${d.device_uid} (${d.status})` }))}
           placeholder="Select device"
         />
         <SelectLike
           icon={Settings}
           label="Site"
-          value={form.deviceSite}
-          onChange={(value) => updateField('deviceSite', value)}
-          options={['North Farm', 'Blue Farm', 'Central Farmhouse', 'Sunrise Aqua Park']}
+          value={form.deviceSiteId}
+          onChange={(value) => updateField('deviceSiteId', value)}
+          options={sites.map(s => ({ value: String(s.id), label: s.name }))}
           placeholder="Select site"
         />
         <button
@@ -67,17 +148,17 @@ export default function AssignmentsPage() {
         <SelectLike
           icon={MapPin}
           label="Site"
-          value={form.agentSite}
-          onChange={(value) => updateField('agentSite', value)}
-          options={['North Farm', 'Blue Farm', 'Central Farmhouse', 'Sunrise Aqua Park']}
+          value={form.agentSiteId}
+          onChange={(value) => updateField('agentSiteId', value)}
+          options={sites.map(s => ({ value: String(s.id), label: s.name }))}
           placeholder="Select site"
         />
         <SelectLike
           icon={UserRound}
           label="Agent"
-          value={form.agent}
-          onChange={(value) => updateField('agent', value)}
-          options={['Agent-001', 'Agent-003', 'Agent-006', 'Agent-008']}
+          value={form.agentUserId}
+          onChange={(value) => updateField('agentUserId', value)}
+          options={agents.map(a => ({ value: String(a.id), label: `${a.full_name} (${a.email})` }))}
           placeholder="Select agent"
         />
         <button
@@ -88,7 +169,8 @@ export default function AssignmentsPage() {
         </button>
       </AssignmentPanel>
 
-      {message && <p className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{message}</p>}
+      {message && <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{message}</p>}
+      {errorMsg && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{errorMsg}</p>}
     </div>
   );
 }
@@ -114,7 +196,7 @@ function SelectLike({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<{ value: string; label: string }>;
   placeholder: string;
 }) {
   return (
@@ -128,7 +210,7 @@ function SelectLike({
           className="h-16 w-full appearance-none rounded-lg border border-[#0d3660] bg-[#020b18]/50 pl-16 pr-12 text-base text-white outline-none transition focus:border-cyan-300"
         >
           <option value="">{placeholder}</option>
-          {options.map((option) => <option key={option}>{option}</option>)}
+          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <ChevronDown className="pointer-events-none absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-200" />
       </div>

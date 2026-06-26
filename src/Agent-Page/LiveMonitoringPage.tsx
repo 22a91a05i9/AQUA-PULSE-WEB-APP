@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Calendar,
   Droplet,
@@ -6,6 +6,11 @@ import {
   Wind,
   Sun,
   Sunset,
+  Cpu,
+  Wifi,
+  AlertCircle,
+  Clock,
+  Battery,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -19,40 +24,8 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-
-// Mock live data for parameters
-const parameterDetails = [
-  { label: 'Temperature', value: '28.1', unit: '°C', status: 'Normal', color: '#22d3ee', icon: Thermometer },
-  { label: 'pH', value: '8.2', unit: '', status: 'Normal', color: '#10b981', icon: Droplet },
-  { label: 'Dissolved Oxygen', value: '5.4', unit: 'mg/L', status: 'Good', color: '#3b82f6', icon: Wind },
-  { label: 'Turbidity', value: '24', unit: 'NTU', status: 'Normal', color: '#a855f7', icon: Droplet },
-];
-
-const pondStatusMarkers = [
-  { id: '01', status: 'healthy', x: 23, y: 35 },
-  { id: '02', status: 'critical', x: 42, y: 30 },
-  { id: '03', status: 'healthy', x: 60, y: 25 },
-  { id: '04', status: 'healthy', x: 78, y: 38 },
-  { id: '05', status: 'warning', x: 18, y: 62 },
-  { id: '06', status: 'healthy', x: 38, y: 55 },
-  { id: '07', status: 'warning', x: 58, y: 68 },
-  { id: '08', status: 'healthy', x: 82, y: 60 },
-];
-
-const liveDeviceFeed = [
-  { id: 'DFX-001', type: 'Temperature Sensor', pond: 'Pond 01', status: 'Online', lastSeen: '2 min ago', battery: 75, signal: 5 },
-  { id: 'DFX-002', type: 'pH Sensor', pond: 'Pond 02', status: 'Online', lastSeen: '3 min ago', battery: 68, signal: 4 },
-  { id: 'DFX-003', type: 'DO Sensor', pond: 'Pond 03', status: 'Online', lastSeen: '2 min ago', battery: 82, signal: 5 },
-  { id: 'DFX-004', type: 'Turbidity Sensor', pond: 'Pond 04', status: 'Online', lastSeen: '1 min ago', battery: 7, signal: 2 },
-  { id: 'DFX-005', type: 'Water Pump', pond: 'Pond 05', status: 'Online', lastSeen: '3 min ago', battery: 63, signal: 4 },
-];
-
-const liveAlerts = [
-  { message: 'Low Dissolved Oxygen', pond: 'Pond 07', time: '1 min ago', type: 'critical' },
-  { message: 'High Turbidity', pond: 'Pond 02', time: '3 min ago', type: 'warning' },
-  { message: 'Temperature Spike', pond: 'Pond 01', time: '5 min ago', type: 'critical' },
-  { message: 'Device Battery Low (20%)', pond: 'Pond 05 - Water Pump', time: '8 min ago', type: 'info' },
-];
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 const envConditions = [
   { label: 'Air Temperature', value: '31.2', unit: '°C', icon: Thermometer },
@@ -68,23 +41,206 @@ const statusColors: Record<string, string> = {
   offline: '#6b7280',
 };
 
-const deviceStatusData = [
-  { name: 'Online', value: 24, color: '#10b981' },
-  { name: 'Maintenance', value: 3, color: '#f59e0b' },
-  { name: 'Offline', value: 5, color: '#ef4444' },
-];
+function formatSeen(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+}
 
-const chartData = [
-  { time: '10:00', temp: 28.0, pH: 8.1, do: 5.5, turbidity: 23 },
-  { time: '10:05', temp: 28.1, pH: 8.2, do: 5.4, turbidity: 24 },
-  { time: '10:10', temp: 28.1, pH: 8.2, do: 5.3, turbidity: 25 },
-  { time: '10:15', temp: 28.2, pH: 8.1, do: 5.4, turbidity: 24 },
-  { time: '10:20', temp: 28.1, pH: 8.2, do: 5.4, turbidity: 24 },
-];
-
-export default function LiveMonitoringPage() {
-  const [selectedPond, setSelectedPond] = useState('All Ponds (10)');
+export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
+  const [selectedPond, setSelectedPond] = useState('all');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(10000); // 10s default
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function loadData() {
+    try {
+      const session = getAuthSession();
+      if (session) {
+        const endpoint = session.user.role === 'owner' ? '/owner/overview' : '/agent/overview';
+        const res = await apiRequest<any>(endpoint, {
+          token: session.token,
+        });
+        let dataResult = res;
+        if (session.user.role === 'owner') {
+          dataResult = {
+            ...res,
+            assigned_sites: res.sites || [],
+          };
+        }
+        setData(dataResult);
+      }
+    } catch (err) {
+      console.error('Failed to load live overview:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setInterval(() => {
+      loadData();
+    }, refreshInterval);
+    return () => clearInterval(timer);
+  }, [autoRefresh, refreshInterval]);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const siteReadings = data?.recent_readings || [];
+  const filteredReadings = selectedPond === 'all' 
+    ? siteReadings 
+    : siteReadings.filter((r: any) => r.site_id?.toString() === selectedPond);
+
+  const latestReading = filteredReadings[0];
+  const getDOValue = (temp: number) => {
+    return Number((8.5 - (temp - 20) * 0.15).toFixed(1));
+  };
+
+  const parameterDetails = [
+    {
+      label: 'Temperature',
+      value: latestReading ? latestReading.temperature_c.toFixed(1) : '28.1',
+      unit: '°C',
+      status: latestReading ? (latestReading.temperature_c < 20 || latestReading.temperature_c > 35 ? 'Critical' : 'Normal') : 'Normal',
+      color: '#22d3ee',
+      icon: Thermometer,
+    },
+    {
+      label: 'pH',
+      value: latestReading ? latestReading.ph.toFixed(1) : '8.2',
+      unit: '',
+      status: latestReading ? (latestReading.ph < 6.5 || latestReading.ph > 8.5 ? 'High' : 'Normal') : 'Normal',
+      color: '#10b981',
+      icon: Droplet,
+    },
+    {
+      label: 'Dissolved Oxygen',
+      value: latestReading ? getDOValue(latestReading.temperature_c).toFixed(1) : '5.4',
+      unit: 'mg/L',
+      status: latestReading ? (getDOValue(latestReading.temperature_c) < 4.0 ? 'Low' : 'Good') : 'Good',
+      color: '#3b82f6',
+      icon: Wind,
+    },
+    {
+      label: 'Turbidity',
+      value: latestReading ? latestReading.turbidity.toFixed(0) : '24',
+      unit: 'NTU',
+      status: latestReading ? (latestReading.turbidity > 100 ? 'High' : 'Normal') : 'Normal',
+      color: '#a855f7',
+      icon: Droplet,
+    },
+  ];
+
+  const getCoordinates = (index: number) => {
+    const coords = [
+      { x: 23, y: 35 },
+      { x: 42, y: 30 },
+      { x: 60, y: 25 },
+      { x: 78, y: 38 },
+      { x: 18, y: 62 },
+      { x: 38, y: 55 },
+      { x: 58, y: 68 },
+      { x: 82, y: 60 },
+    ];
+    return coords[index % coords.length];
+  };
+
+  const pondStatusMarkers = (data?.assigned_sites || []).map((site: any, idx: number) => {
+    const siteAlerts = (data?.alerts || []).filter((a: any) => a.site_id === site.id && a.status === 'open');
+    let status = 'healthy';
+    if (siteAlerts.some((a: any) => a.severity === 'critical')) {
+      status = 'critical';
+    } else if (siteAlerts.some((a: any) => a.severity === 'warning')) {
+      status = 'warning';
+    }
+    const coords = getCoordinates(idx);
+    return {
+      id: site.id.toString(),
+      name: site.name,
+      status,
+      x: coords.x,
+      y: coords.y,
+    };
+  });
+
+  const rawDevicesList = data?.devices || [];
+  const filteredDevicesList = selectedPond === 'all'
+    ? rawDevicesList
+    : rawDevicesList.filter((d: any) => d.site_id?.toString() === selectedPond);
+
+  const liveDeviceFeed = filteredDevicesList.map((dev: any) => {
+    const site = (data?.assigned_sites || []).find((s: any) => s.id === dev.site_id);
+    const pondName = site ? site.name : `Site #${dev.site_id}`;
+    const devReadings = (data?.recent_readings || []).filter((r: any) => r.device_id === dev.id);
+    const latestDevReading = dev.latest_reading || devReadings[0];
+
+    let battery = 95;
+    if (latestDevReading && latestDevReading.battery_v != null) {
+      const v = latestDevReading.battery_v;
+      if (v >= 4.2) battery = 100;
+      else if (v <= 3.0) battery = 0;
+      else battery = Math.round(((v - 3.0) / (4.2 - 3.0)) * 100);
+    }
+
+    return {
+      id: dev.device_uid,
+      type: 'Water Quality Sensor',
+      pond: pondName,
+      status: dev.status === 'active' || dev.status === 'online' ? 'Online' : 'Offline',
+      lastSeen: latestDevReading ? formatSeen(latestDevReading.collected_at) : 'N/A',
+      battery,
+      signal: latestDevReading && latestDevReading.signal_dbm ? (latestDevReading.signal_dbm > -50 ? 5 : latestDevReading.signal_dbm > -70 ? 4 : 3) : 5,
+    };
+  });
+
+  const rawAlerts = data?.alerts || [];
+  const filteredAlerts = selectedPond === 'all'
+    ? rawAlerts
+    : rawAlerts.filter((a: any) => a.site_id?.toString() === selectedPond);
+
+  const liveAlerts = filteredAlerts.map((a: any) => ({
+    message: a.title || a.message || 'Water quality alert',
+    pond: `Site ID #${a.site_id}`,
+    time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    type: a.severity || 'warning',
+  }));
+  const topLiveAlerts = liveAlerts.slice(0, 4);
+
+  const activeCount = rawDevicesList.filter((d: any) => d.status === 'active' || d.status === 'online').length;
+  const maintCount = rawDevicesList.filter((d: any) => d.status === 'maintenance').length;
+  const offlineCount = rawDevicesList.filter((d: any) => d.status === 'offline' || d.status === 'inactive').length;
+
+  const deviceStatusData = [
+    { name: 'Online', value: activeCount, color: '#10b981' },
+    { name: 'Maintenance', value: maintCount, color: '#f59e0b' },
+    { name: 'Offline', value: offlineCount, color: '#ef4444' },
+  ];
+
+  const chartData = filteredReadings.slice(0, 10).reverse().map((r: any) => ({
+    time: new Date(r.collected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    temp: r.temperature_c,
+    pH: r.ph,
+    do: getDOValue(r.temperature_c),
+    turbidity: r.turbidity,
+  }));
 
   return (
     <div className="space-y-6 animate-fade-in text-slate-300">
@@ -96,10 +252,10 @@ export default function LiveMonitoringPage() {
             onChange={(e) => setSelectedPond(e.target.value)}
             className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-4 text-sm text-white focus:outline-none focus:border-[#06b6d4]"
           >
-            <option value="All Ponds (10)">All Ponds (10)</option>
-            <option value="Pond 01">Pond 01</option>
-            <option value="Pond 02">Pond 02</option>
-            <option value="Pond 03">Pond 03</option>
+            <option value="all">All Ponds ({data?.assigned_sites?.length || 0})</option>
+            {(data?.assigned_sites || []).map((site: any) => (
+              <option key={site.id} value={site.id.toString()}>{site.name}</option>
+            ))}
           </select>
         </div>
 
@@ -118,7 +274,14 @@ export default function LiveMonitoringPage() {
                 }`}
               />
             </button>
-            <select className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-2 text-xs text-slate-350 focus:outline-none">
+            <select
+              value={refreshInterval === 10000 ? '10s' : refreshInterval === 30000 ? '30s' : '1m'}
+              onChange={(e) => {
+                const val = e.target.value;
+                setRefreshInterval(val === '10s' ? 10000 : val === '30s' ? 30000 : 60000);
+              }}
+              className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-2 text-xs text-slate-350 focus:outline-none"
+            >
               <option value="10s">10 sec</option>
               <option value="30s">30 sec</option>
               <option value="1m">1 min</option>
@@ -319,7 +482,7 @@ export default function LiveMonitoringPage() {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-lg font-bold text-white">32</span>
+                  <span className="text-lg font-bold text-white">{rawDevicesList.length}</span>
                   <span className="text-[8px] text-slate-500">Total</span>
                 </div>
               </div>
@@ -345,10 +508,15 @@ export default function LiveMonitoringPage() {
           <div className="glass rounded-xl p-5 border border-slate-800">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-white">Live Alerts</h3>
-              <button className="text-xs text-[#06b6d4] hover:text-[#22d3ee] font-semibold transition">View All</button>
+              <button
+                onClick={() => onNavigate?.('alerts')}
+                className="text-xs text-[#06b6d4] hover:text-[#22d3ee] font-semibold transition"
+              >
+                View All
+              </button>
             </div>
             <div className="space-y-3">
-              {liveAlerts.map((alert, i) => (
+              {topLiveAlerts.map((alert, i) => (
                 <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg bg-[#041526]/50 border border-slate-850">
                   <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${
                     alert.type === 'critical' ? 'bg-red-500 animate-pulse' : alert.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
@@ -360,6 +528,11 @@ export default function LiveMonitoringPage() {
                   <span className="text-[9px] text-slate-450 shrink-0">{alert.time}</span>
                 </div>
               ))}
+              {topLiveAlerts.length === 0 && (
+                <div className="rounded-lg border border-slate-850 bg-[#041526]/50 p-3 text-xs text-slate-400">
+                  No live alerts for your assigned sites.
+                </div>
+              )}
             </div>
           </div>
 

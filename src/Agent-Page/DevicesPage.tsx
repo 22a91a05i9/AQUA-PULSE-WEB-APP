@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -29,12 +29,17 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
+import { hasApiBaseUrl } from '../lib/config';
 
 interface Device {
   id: string;
+  uid: string;
   name: string;
   type: string;
   pondName: string;
+  siteId: number | null;
   status: 'online' | 'warning' | 'offline' | 'maintenance';
   lastSeen: string;
   battery: number | null;
@@ -51,208 +56,23 @@ interface Device {
   salinity: string;
 }
 
-const initialDevices: Device[] = [
-  {
-    id: 'WQS-001',
-    name: 'Water Quality Sensor 01',
-    type: 'Water Quality Sensor',
-    pondName: 'Pond 03',
-    status: 'online',
-    lastSeen: '2 min ago',
-    battery: 85,
-    mac: 'AC:23:3F:7B:1A:9C',
-    ip: '192.168.1.101',
-    firmware: 'v1.2.4',
-    signal: 'Strong (-45 dBm)',
-    installedOn: 'May 10, 2024',
-    temp: '28.1',
-    pH: '8.9',
-    do: '3.2',
-    turbidity: '120',
-    ec: '420',
-    salinity: '0.5',
-  },
-  {
-    id: 'WQS-002',
-    name: 'Water Quality Sensor 02',
-    type: 'Water Quality Sensor',
-    pondName: 'Pond 07',
-    status: 'online',
-    lastSeen: '5 min ago',
-    battery: 76,
-    mac: 'AC:23:3F:7B:1A:9D',
-    ip: '192.168.1.102',
-    firmware: 'v1.2.4',
-    signal: 'Strong (-48 dBm)',
-    installedOn: 'May 11, 2024',
-    temp: '27.4',
-    pH: '7.8',
-    do: '5.2',
-    turbidity: '45',
-    ec: '390',
-    salinity: '0.4',
-  },
-  {
-    id: 'SF-001',
-    name: 'Smart Feeder 01',
-    type: 'Smart Feeder',
-    pondName: 'Pond 02',
-    status: 'warning',
-    lastSeen: '10 min ago',
-    battery: 42,
-    mac: 'AC:23:3F:7B:1B:01',
-    ip: '192.168.1.110',
-    firmware: 'v1.1.2',
-    signal: 'Medium (-65 dBm)',
-    installedOn: 'May 12, 2024',
-    temp: '26.8',
-    pH: '8.1',
-    do: '4.8',
-    turbidity: '60',
-    ec: '410',
-    salinity: '0.5',
-  },
-  {
-    id: 'SF-002',
-    name: 'Smart Feeder 02',
-    type: 'Smart Feeder',
-    pondName: 'Pond 04',
-    status: 'online',
-    lastSeen: '12 min ago',
-    battery: 64,
-    mac: 'AC:23:3F:7B:1B:02',
-    ip: '192.168.1.111',
-    firmware: 'v1.1.2',
-    signal: 'Strong (-50 dBm)',
-    installedOn: 'May 12, 2024',
-    temp: '27.9',
-    pH: '8.3',
-    do: '5.1',
-    turbidity: '35',
-    ec: '405',
-    salinity: '0.4',
-  },
-  {
-    id: 'AE-001',
-    name: 'Aerator 01',
-    type: 'Aerator',
-    pondName: 'Pond 01',
-    status: 'online',
-    lastSeen: '3 min ago',
-    battery: 92,
-    mac: 'AC:23:3F:7B:1C:11',
-    ip: '192.168.1.120',
-    firmware: 'v2.0.1',
-    signal: 'Strong (-47 dBm)',
-    installedOn: 'May 14, 2024',
-    temp: '28.2',
-    pH: '8.2',
-    do: '6.0',
-    turbidity: '25',
-    ec: '400',
-    salinity: '0.4',
-  },
-  {
-    id: 'AE-002',
-    name: 'Aerator 02',
-    type: 'Aerator',
-    pondName: 'Pond 04',
-    status: 'offline',
-    lastSeen: '1 hr ago',
-    battery: 30,
-    mac: 'AC:23:3F:7B:1C:12',
-    ip: '192.168.1.121',
-    firmware: 'v2.0.1',
-    signal: 'Disconnected',
-    installedOn: 'May 14, 2024',
-    temp: '27.1',
-    pH: '7.9',
-    do: '3.0',
-    turbidity: '110',
-    ec: '415',
-    salinity: '0.5',
-  },
-  {
-    id: 'PH-001',
-    name: 'pH Sensor 01',
-    type: 'pH Sensor',
-    pondName: 'Pond 06',
-    status: 'online',
-    lastSeen: '4 min ago',
-    battery: 88,
-    mac: 'AC:23:3F:7B:1A:80',
-    ip: '192.168.1.105',
-    firmware: 'v1.2.1',
-    signal: 'Strong (-52 dBm)',
-    installedOn: 'May 15, 2024',
-    temp: '28.5',
-    pH: '6.4',
-    do: '4.2',
-    turbidity: '80',
-    ec: '430',
-    salinity: '0.6',
-  },
-  {
-    id: 'DO-001',
-    name: 'Dissolved Oxygen Sensor',
-    type: 'DO Sensor',
-    pondName: 'Pond 03',
-    status: 'warning',
-    lastSeen: '8 min ago',
-    battery: 35,
-    mac: 'AC:23:3F:7B:1A:85',
-    ip: '192.168.1.106',
-    firmware: 'v1.2.2',
-    signal: 'Medium (-68 dBm)',
-    installedOn: 'May 16, 2024',
-    temp: '27.8',
-    pH: '8.0',
-    do: '2.8',
-    turbidity: '95',
-    ec: '425',
-    salinity: '0.5',
-  },
-  {
-    id: 'TB-001',
-    name: 'Turbidity Sensor',
-    type: 'Turbidity Sensor',
-    pondName: 'Pond 07',
-    status: 'online',
-    lastSeen: '5 min ago',
-    battery: 70,
-    mac: 'AC:23:3F:7B:1A:90',
-    ip: '192.168.1.107',
-    firmware: 'v1.2.2',
-    signal: 'Strong (-55 dBm)',
-    installedOn: 'May 16, 2024',
-    temp: '28.0',
-    pH: '8.1',
-    do: '4.9',
-    turbidity: '135',
-    ec: '420',
-    salinity: '0.5',
-  },
-  {
-    id: 'WQS-003',
-    name: 'Water Quality Sensor 03',
-    type: 'Water Quality Sensor',
-    pondName: 'Pond 01',
-    status: 'maintenance',
-    lastSeen: '2 hrs ago',
-    battery: null,
-    mac: 'AC:23:3F:7B:1A:9F',
-    ip: '192.168.1.103',
-    firmware: 'v1.2.4',
-    signal: 'Weak (-80 dBm)',
-    installedOn: 'May 17, 2024',
-    temp: '27.6',
-    pH: '7.9',
-    do: '4.5',
-    turbidity: '50',
-    ec: '395',
-    salinity: '0.4',
-  },
-];
+interface SensorReading {
+  id: number;
+  device_id: number;
+  site_id: number | null;
+  temperature_c: number;
+  ph: number;
+  turbidity: number;
+  battery_v?: number | null;
+  signal_dbm?: number | null;
+  collected_at: string;
+  received_at: string;
+}
+
+
+const getDOValue = (temp: number) => {
+  return Number((8.5 - (temp - 20) * 0.15).toFixed(1));
+};
 
 const statusColors: Record<string, string> = {
   online: '#22c55e',
@@ -260,6 +80,14 @@ const statusColors: Record<string, string> = {
   offline: '#ef4444',
   maintenance: '#6b7280',
 };
+
+/* ─── Static fallback devices (shown when backend is unreachable) ─── */
+const fallbackDevices: Device[] = [
+  { id: '1', uid: 'DVC-001', name: 'Device DVC-001', type: 'Water Quality Sensor', pondName: 'Pond 01 - North Farm', siteId: 1, status: 'online', lastSeen: '2 min ago', battery: 95, mac: 'AC:23:3F:7B:1A:01', ip: '192.168.1.101', firmware: 'v1.2.4', signal: 'Excellent (-35 dBm)', installedOn: 'Jan 15, 2024', temp: '28.1', pH: '7.8', do: '6.2', turbidity: '24', ec: '420', salinity: '0.5' },
+  { id: '2', uid: 'DVC-003', name: 'Device DVC-003', type: 'Water Quality Sensor', pondName: 'Pond 03 - Central Farm', siteId: 2, status: 'online', lastSeen: '5 min ago', battery: 87, mac: 'AC:23:3F:7B:1A:02', ip: '192.168.1.102', firmware: 'v1.2.4', signal: 'Good (-48 dBm)', installedOn: 'Feb 20, 2024', temp: '27.5', pH: '8.2', do: '5.4', turbidity: '32', ec: '415', salinity: '0.4' },
+  { id: '3', uid: 'DVC-005', name: 'Device DVC-005', type: 'Water Quality Sensor', pondName: 'Pond 02 - East Farm', siteId: 1, status: 'warning', lastSeen: '15 min ago', battery: 42, mac: 'AC:23:3F:7B:1A:03', ip: '192.168.1.103', firmware: 'v1.2.3', signal: 'Fair (-62 dBm)', installedOn: 'Mar 10, 2024', temp: '31.2', pH: '8.9', do: '3.2', turbidity: '120', ec: '450', salinity: '0.6' },
+  { id: '4', uid: 'DVC-007', name: 'Device DVC-007', type: 'Water Quality Sensor', pondName: 'Pond 01 - North Farm', siteId: 1, status: 'offline', lastSeen: '2 hr ago', battery: 12, mac: 'AC:23:3F:7B:1A:04', ip: '192.168.1.104', firmware: 'v1.2.2', signal: 'N/A', installedOn: 'Apr 05, 2024', temp: '26.8', pH: '7.5', do: '6.8', turbidity: '18', ec: '400', salinity: '0.3' },
+];
 
 // Historical trend data matching Pic 3
 const trendData = [
@@ -277,8 +105,121 @@ export default function DevicesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'liveData' | 'history' | 'alerts' | 'settings'>('overview');
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [deviceReadings, setDeviceReadings] = useState<SensorReading[]>([]);
+  const [readingsLoading, setReadingsLoading] = useState(false);
 
-  const filteredDevices = initialDevices.filter((dev) => {
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const session = getAuthSession();
+        if (session && hasApiBaseUrl()) {
+          const res = await apiRequest<any>('/agent/overview', {
+            token: session.token,
+          });
+          setData(res);
+        }
+      } catch (err) {
+        console.warn('Backend unreachable, using fallback devices:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    async function loadDeviceReadings() {
+      if (!selectedDevice) {
+        setDeviceReadings([]);
+        return;
+      }
+
+      setReadingsLoading(true);
+      try {
+        const session = getAuthSession();
+        if (!session || !hasApiBaseUrl()) {
+          setDeviceReadings([]);
+          return;
+        }
+
+        const readings = await apiRequest<SensorReading[]>(`/readings/device/${selectedDevice.id}`, {
+          token: session.token,
+        });
+        setDeviceReadings(readings);
+      } catch (err) {
+        console.warn('Failed to load device sensor readings (backend may be offline):', err);
+        setDeviceReadings([]);
+      } finally {
+        setReadingsLoading(false);
+      }
+    }
+
+    loadDeviceReadings();
+  }, [selectedDevice]);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const devicesList: Device[] = data && data.devices && data.devices.length > 0
+    ? (data.devices).map((dev: any) => {
+        const site = (data?.assigned_sites || []).find((s: any) => s.id === dev.site_id);
+        const pondName = site ? site.name : `Site #${dev.site_id}`;
+
+        const devReadings = (data?.recent_readings || []).filter((r: any) =>
+          Number(r.device_id) === Number(dev.id)
+        );
+        const latestReading = devReadings[0];
+
+        let status: 'online' | 'warning' | 'offline' | 'maintenance' = 'online';
+        if (dev.status === 'active' || dev.status === 'online') {
+          status = 'online';
+        } else if (dev.status === 'warning') {
+          status = 'warning';
+        } else if (dev.status === 'offline' || dev.status === 'inactive') {
+          status = 'offline';
+        } else if (dev.status === 'maintenance') {
+          status = 'maintenance';
+        }
+
+        return {
+          id: dev.id.toString(),
+          uid: dev.device_uid,
+          name: `Device ${dev.device_uid}`,
+          type: 'Water Quality Sensor',
+          pondName,
+          siteId: dev.site_id ?? null,
+          status,
+          lastSeen: latestReading ? 'Just now' : 'N/A',
+          battery:
+            latestReading && typeof latestReading.battery_v === 'number'
+              ? Math.max(0, Math.min(100, Math.round(latestReading.battery_v * 20)))
+              : null,
+          mac: 'AC:23:3F:7B:1A:' + dev.id.toString().padStart(2, '0'),
+          ip: `192.168.1.${100 + dev.id}`,
+          firmware: 'v1.2.4',
+          signal:
+            latestReading && typeof latestReading.signal_dbm === 'number'
+              ? `Measured (${latestReading.signal_dbm} dBm)`
+              : 'N/A',
+          installedOn: new Date(dev.created_at || Date.now()).toLocaleDateString(),
+          temp: latestReading ? latestReading.temperature_c.toFixed(1) : '28.1',
+          pH: latestReading ? latestReading.ph.toFixed(1) : '8.9',
+          do: latestReading ? getDOValue(latestReading.temperature_c).toFixed(1) : '3.2',
+          turbidity: latestReading ? latestReading.turbidity.toFixed(0) : '120',
+          ec: '420',
+          salinity: '0.5',
+        };
+      })
+    : fallbackDevices;
+
+  const filteredDevices = devicesList.filter((dev) => {
     const matchesSearch =
       dev.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       dev.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -286,6 +227,38 @@ export default function DevicesPage() {
     const matchesStatus = statusFilter === 'all' || dev.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const totalDevs = devicesList.length;
+  const onlineDevs = devicesList.filter(d => d.status === 'online').length;
+  const warningDevs = devicesList.filter(d => d.status === 'warning').length;
+  const offlineDevs = devicesList.filter(d => d.status === 'offline').length;
+  const maintenanceDevs = devicesList.filter(d => d.status === 'maintenance').length;
+
+  const onlinePct = totalDevs ? Math.round((onlineDevs / totalDevs) * 100) : 0;
+  const warningPct = totalDevs ? Math.round((warningDevs / totalDevs) * 100) : 0;
+  const offlinePct = totalDevs ? Math.round((offlineDevs / totalDevs) * 100) : 0;
+  const maintenancePct = totalDevs ? Math.round((maintenanceDevs / totalDevs) * 100) : 0;
+
+  const selectedLiveReadings = deviceReadings.length > 0
+    ? deviceReadings
+    : selectedDevice
+      ? (data?.recent_readings || []).filter(
+          (r: any) => Number(r.device_id) === Number(selectedDevice.id)
+        )
+      : [];
+
+
+  const selectedTrendData = selectedLiveReadings.slice(0, 10).reverse().map((reading: SensorReading) => ({
+    time: new Date(reading.collected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    value: reading.temperature_c,
+  }));
+  const latestSelectedReading = selectedLiveReadings[0] as SensorReading | undefined;
+  const selectedTemp = latestSelectedReading ? Number(latestSelectedReading.temperature_c).toFixed(1) : selectedDevice?.temp || 'N/A';
+  const selectedPh = latestSelectedReading ? Number(latestSelectedReading.ph).toFixed(2) : selectedDevice?.pH || 'N/A';
+  const selectedTurbidity = latestSelectedReading ? Number(latestSelectedReading.turbidity).toFixed(0) : selectedDevice?.turbidity || 'N/A';
+  const selectedDo = latestSelectedReading
+    ? getDOValue(Number(latestSelectedReading.temperature_c)).toFixed(1)
+    : selectedDevice?.do || 'N/A';
 
   const getBatteryColorClass = (battery: number | null, status: string) => {
     if (status === 'offline' || battery === null) return 'text-slate-500';
@@ -301,8 +274,8 @@ export default function DevicesPage() {
         <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
           <div>
             <div className="text-xs text-slate-400 font-medium">Total Devices</div>
-            <div className="text-2xl font-bold text-white mt-1">32</div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-1">↑ 4 from yesterday</div>
+            <div className="text-2xl font-bold text-white mt-1">{totalDevs}</div>
+            <div className="text-[10px] text-emerald-400 font-semibold mt-1">Belonging to you</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#06b6d4]/10 border border-[#06b6d4]/30">
             <Cpu className="w-5 h-5 text-[#06b6d4]" />
@@ -312,8 +285,8 @@ export default function DevicesPage() {
         <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
           <div>
             <div className="text-xs text-slate-400 font-medium">Online</div>
-            <div className="text-2xl font-bold text-white mt-1">24</div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-1">75%</div>
+            <div className="text-2xl font-bold text-white mt-1">{onlineDevs}</div>
+            <div className="text-[10px] text-emerald-400 font-semibold mt-1">{onlinePct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-500/10 border border-emerald-500/30">
             <Wifi className="w-5 h-5 text-emerald-400" />
@@ -323,8 +296,8 @@ export default function DevicesPage() {
         <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
           <div>
             <div className="text-xs text-slate-400 font-medium">Warning</div>
-            <div className="text-2xl font-bold text-white mt-1">5</div>
-            <div className="text-[10px] text-amber-500 font-semibold mt-1">16%</div>
+            <div className="text-2xl font-bold text-white mt-1">{warningDevs}</div>
+            <div className="text-[10px] text-amber-500 font-semibold mt-1">{warningPct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-amber-500/10 border border-amber-500/30">
             <AlertCircle className="w-5 h-5 text-amber-500" />
@@ -334,8 +307,8 @@ export default function DevicesPage() {
         <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
           <div>
             <div className="text-xs text-slate-400 font-medium">Offline</div>
-            <div className="text-2xl font-bold text-white mt-1">2</div>
-            <div className="text-[10px] text-red-500 font-semibold mt-1">6%</div>
+            <div className="text-2xl font-bold text-white mt-1">{offlineDevs}</div>
+            <div className="text-[10px] text-red-500 font-semibold mt-1">{offlinePct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-500/10 border border-red-500/30">
             <WifiOff className="w-5 h-5 text-red-500" />
@@ -345,8 +318,8 @@ export default function DevicesPage() {
         <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
           <div>
             <div className="text-xs text-slate-400 font-medium">Maintenance</div>
-            <div className="text-2xl font-bold text-white mt-1">1</div>
-            <div className="text-[10px] text-slate-400 font-semibold mt-1">3%</div>
+            <div className="text-2xl font-bold text-white mt-1">{maintenanceDevs}</div>
+            <div className="text-[10px] text-slate-400 font-semibold mt-1">{maintenancePct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-500/10 border border-slate-500/30">
             <Settings className="w-5 h-5 text-slate-400" />
@@ -360,6 +333,13 @@ export default function DevicesPage() {
           {/* Header Card */}
           <div className="glass rounded-2xl p-6 border border-slate-800 flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSelectedDevice(null)}
+                className="h-10 w-10 rounded-lg border border-slate-700/50 bg-[#041526]/60 text-slate-300 hover:border-[#06b6d4]/60 hover:text-white transition flex items-center justify-center"
+                title="Back to Devices"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
               <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 bg-[#06b6d4]/10 border border-[#06b6d4]/30 shadow-lg">
                 <Droplet className="w-7 h-7 text-[#06b6d4]" />
               </div>
@@ -443,10 +423,10 @@ export default function DevicesPage() {
                   <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Live Parameters</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {[
-                      { label: 'Temperature', value: selectedDevice.temp, unit: '°C', status: 'Normal', statusColor: '#22c55e', color: '#22d3ee', icon: Thermometer },
-                      { label: 'pH', value: selectedDevice.pH, unit: '', status: parseFloat(selectedDevice.pH) > 8.5 ? 'High' : 'Normal', statusColor: parseFloat(selectedDevice.pH) > 8.5 ? '#ef4444' : '#22c55e', color: '#ef4444', icon: Droplet },
-                      { label: 'Dissolved Oxygen', value: selectedDevice.do, unit: 'mg/L', status: parseFloat(selectedDevice.do) < 4.0 ? 'Low' : 'Good', statusColor: parseFloat(selectedDevice.do) < 4.0 ? '#f59e0b' : '#22c55e', color: '#3b82f6', icon: Wind },
-                      { label: 'Turbidity', value: selectedDevice.turbidity, unit: 'NTU', status: parseFloat(selectedDevice.turbidity) > 100 ? 'High' : 'Normal', statusColor: parseFloat(selectedDevice.turbidity) > 100 ? '#ef4444' : '#22c55e', color: '#a855f7', icon: Droplet },
+                      { label: 'Temperature', value: selectedTemp, unit: '°C', status: selectedTemp !== 'N/A' && (Number(selectedTemp) < 20 || Number(selectedTemp) > 35) ? 'Critical' : 'Normal', statusColor: selectedTemp !== 'N/A' && (Number(selectedTemp) < 20 || Number(selectedTemp) > 35) ? '#ef4444' : '#22c55e', color: '#22d3ee', icon: Thermometer },
+                      { label: 'pH', value: selectedPh, unit: '', status: selectedPh !== 'N/A' && Number(selectedPh) > 8.5 ? 'High' : 'Normal', statusColor: selectedPh !== 'N/A' && Number(selectedPh) > 8.5 ? '#ef4444' : '#22c55e', color: '#ef4444', icon: Droplet },
+                      { label: 'Dissolved Oxygen', value: selectedDo, unit: 'mg/L', status: selectedDo !== 'N/A' && Number(selectedDo) < 4.0 ? 'Low' : 'Good', statusColor: selectedDo !== 'N/A' && Number(selectedDo) < 4.0 ? '#f59e0b' : '#22c55e', color: '#3b82f6', icon: Wind },
+                      { label: 'Turbidity', value: selectedTurbidity, unit: 'NTU', status: selectedTurbidity !== 'N/A' && Number(selectedTurbidity) > 100 ? 'High' : 'Normal', statusColor: selectedTurbidity !== 'N/A' && Number(selectedTurbidity) > 100 ? '#ef4444' : '#22c55e', color: '#a855f7', icon: Droplet },
                       { label: 'Electrical Conductivity', value: selectedDevice.ec, unit: 'µS/cm', status: 'Normal', statusColor: '#22c55e', color: '#10b981', icon: Cpu },
                       { label: 'Salinity', value: selectedDevice.salinity, unit: 'ppt', status: 'Normal', statusColor: '#22c55e', color: '#3b82f6', icon: Droplet },
                     ].map((p, idx) => {
@@ -494,6 +474,59 @@ export default function DevicesPage() {
                       <Battery className="w-5 h-5 text-emerald-400" />
                     </div>
                   </div>
+
+                  <div className="mt-5 overflow-hidden rounded-xl border border-slate-800 bg-[#041526]/40">
+                    <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Recent Sensor Readings</h4>
+                        <p className="mt-0.5 text-xs text-slate-400">Latest database rows for this device.</p>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('liveData')}
+                        className="text-xs font-semibold text-[#06b6d4] hover:text-[#22d3ee] transition"
+                      >
+                        View Live Data
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-500 uppercase">
+                            <th className="px-4 py-2.5">Device</th>
+                            <th className="px-4 py-2.5">Site</th>
+                            <th className="px-4 py-2.5">Temp C</th>
+                            <th className="px-4 py-2.5">pH</th>
+                            <th className="px-4 py-2.5">Turbidity</th>
+                            <th className="px-4 py-2.5">Collected At</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 text-slate-300">
+                          {readingsLoading ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-5 text-center text-slate-400">Loading sensor readings...</td>
+                            </tr>
+                          ) : selectedLiveReadings.length > 0 ? (
+                            selectedLiveReadings.slice(0, 5).map((reading: SensorReading) => (
+                              <tr key={reading.id} className="hover:bg-[#071f35]/30">
+                                <td className="px-4 py-2.5 font-semibold text-white">{selectedDevice.uid}</td>
+                                <td className="px-4 py-2.5 font-medium text-white">{selectedDevice.pondName}</td>
+                                <td className="px-4 py-2.5">{Number(reading.temperature_c).toFixed(1)}</td>
+                                <td className="px-4 py-2.5">{Number(reading.ph).toFixed(2)}</td>
+                                <td className="px-4 py-2.5">{Number(reading.turbidity).toFixed(0)}</td>
+                                <td className="px-4 py-2.5 text-slate-400">{new Date(reading.collected_at).toLocaleString()}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-5 text-center text-slate-400">
+                                No sensor readings found for this assigned device.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -510,7 +543,7 @@ export default function DevicesPage() {
 
                   <div className="h-40 mt-4">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={trendData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                      <LineChart data={selectedTrendData.length > 0 ? selectedTrendData : trendData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                         <CartesianGrid stroke="#0d366015" strokeDasharray="3 3" />
                         <XAxis dataKey="time" stroke="#64748b" fontSize={9} />
                         <YAxis stroke="#64748b" fontSize={9} domain={[18, 30]} />
@@ -565,13 +598,100 @@ export default function DevicesPage() {
             </div>
           )}
 
-          {activeTab !== 'overview' && (
+          {activeTab === 'liveData' && (
+            <div className="glass rounded-xl border border-slate-800 overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 border-b border-slate-800">
+                <div>
+                  <h3 className="text-base font-bold text-white">Live Sensor Readings</h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Showing database readings for {selectedDevice.name} at {selectedDevice.pondName}.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedDevice(null)}
+                  className="h-9 px-3 flex items-center gap-2 rounded-lg border border-slate-700/50 text-xs font-semibold text-[#06b6d4] hover:text-[#22d3ee] transition"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Back to Devices
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#041526]/30">
+                      <th className="py-4 px-6">Device</th>
+                      <th className="py-4 px-6">Site</th>
+                      <th className="py-4 px-6">Temp C</th>
+                      <th className="py-4 px-6">pH</th>
+                      <th className="py-4 px-6">Turbidity</th>
+                      <th className="py-4 px-6">Collected At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
+                    {readingsLoading ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 px-6 text-center text-slate-400">Loading sensor readings...</td>
+                      </tr>
+                    ) : selectedLiveReadings.length > 0 ? (
+                      selectedLiveReadings.map((reading: SensorReading) => (
+                        <tr key={reading.id} className="hover:bg-[#071f35]/30 transition">
+                          <td className="py-4 px-6 font-semibold text-white">{selectedDevice.uid}</td>
+                          <td className="py-4 px-6 font-medium text-white">{selectedDevice.pondName}</td>
+                          <td className="py-4 px-6">{Number(reading.temperature_c).toFixed(1)}</td>
+                          <td className="py-4 px-6">{Number(reading.ph).toFixed(2)}</td>
+                          <td className="py-4 px-6">{Number(reading.turbidity).toFixed(0)}</td>
+                          <td className="py-4 px-6 text-slate-400">{new Date(reading.collected_at).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="py-8 px-6 text-center text-slate-400">
+                          No sensor readings found for this assigned device.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-5 border-t border-slate-800">
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={selectedTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid stroke="#0d366015" strokeDasharray="3 3" />
+                      <XAxis dataKey="time" stroke="#64748b" fontSize={9} />
+                      <YAxis stroke="#64748b" fontSize={9} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#041526',
+                          borderColor: '#0d3660',
+                          fontSize: '10px',
+                          color: '#fff',
+                        }}
+                      />
+                      <Line type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={2.5} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab !== 'overview' && activeTab !== 'liveData' && (
             <div className="glass rounded-xl p-8 border border-slate-800 text-center flex flex-col items-center justify-center min-h-[200px]">
               <Cpu className="w-10 h-10 text-[#06b6d4] opacity-50 mb-3 animate-float" />
               <h3 className="text-base font-bold text-white mb-1 capitalize">{activeTab} Details</h3>
               <p className="text-xs text-slate-400 max-w-sm">
                 The {activeTab} panel is fully active and loaded.
               </p>
+              <button
+                onClick={() => setSelectedDevice(null)}
+                className="mt-5 h-9 px-4 flex items-center gap-2 rounded-lg border border-slate-700/50 text-xs font-semibold text-[#06b6d4] hover:text-[#22d3ee] transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to Devices
+              </button>
             </div>
           )}
         </div>
@@ -720,7 +840,7 @@ export default function DevicesPage() {
             {/* Pagination */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
               <div className="text-xs text-slate-400">
-                Showing 1 to {filteredDevices.length} of {initialDevices.length} devices
+                Showing 1 to {filteredDevices.length} of {devicesList.length} devices
               </div>
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">

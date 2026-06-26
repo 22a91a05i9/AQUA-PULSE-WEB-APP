@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Eye, Filter, Grid2X2, Plus, Search, Upload, UserCheck } from 'lucide-react';
-import { owners, tableActionsIcon } from './data';
+import { owners as defaultOwners, tableActionsIcon } from './data';
 import { Panel, PrimaryButton, StatCard, StatusBadge, TablePager } from './components';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 const MoreVertical = tableActionsIcon;
 
@@ -23,10 +25,53 @@ const initialForm = {
 };
 
 export default function OwnersPage() {
-  const [ownerList, setOwnerList] = useState<OwnerRecord[]>(owners);
-  const [selectedOwner, setSelectedOwner] = useState<OwnerRecord>(owners[0]);
+  const [ownerList, setOwnerList] = useState<OwnerRecord[]>([]);
+  const [selectedOwner, setSelectedOwner] = useState<OwnerRecord | null>(null);
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const loadOwners = async () => {
+    try {
+      const session = getAuthSession();
+      if (session) {
+        const apiOwners = await apiRequest<any[]>('/manager/owners', {
+          token: session.token,
+        });
+
+        const normalized: OwnerRecord[] = apiOwners.map((o: any) => {
+          const created = o.created_at ? new Date(o.created_at) : null;
+          const joinedStr = created ? created.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently';
+          const timeStr = created ? created.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+          return {
+            initials: (o.full_name || 'U').split(' ').filter(Boolean).map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+            name: o.full_name || 'Unnamed Owner',
+            email: o.email,
+            phone: o.phone || 'No phone',
+            status: o.is_active ? 'Active' : 'Inactive',
+            joined: joinedStr,
+            time: timeStr,
+          };
+        });
+
+        setOwnerList(normalized);
+        setSelectedOwner(normalized[0] || null);
+      } else {
+        setOwnerList(defaultOwners);
+        setSelectedOwner(defaultOwners[0] || null);
+      }
+    } catch (err) {
+      console.error('Failed to load owners from DB, using fallback defaults:', err);
+      setOwnerList(defaultOwners);
+      setSelectedOwner(defaultOwners[0] || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOwners();
+  }, []);
 
   const ownerStats = useMemo(() => {
     const active = ownerList.filter((owner) => owner.status === 'Active').length;
@@ -36,48 +81,53 @@ export default function OwnersPage() {
     return { active, inactive, invited, total: ownerList.length };
   }, [ownerList]);
 
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+
   const updateForm = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
     setMessage('');
   };
 
-  const createOwner = () => {
+  const createOwner = async () => {
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
       setMessage('Enter name, email, and phone before creating an owner.');
       return;
     }
 
-    const exists = ownerList.some((owner) => owner.email.toLowerCase() === form.email.trim().toLowerCase());
+    const password = form.password.trim() || 'AquaOwner@2026';
 
-    if (exists) {
-      setMessage('Owner with this email already exists.');
-      return;
+    try {
+      const session = getAuthSession();
+      if (session) {
+        await apiRequest('/manager/owners', {
+          method: 'POST',
+          token: session.token,
+          body: JSON.stringify({
+            full_name: form.name.trim(),
+            email: form.email.trim(),
+            phone: form.phone.trim(),
+            password: password,
+          }),
+        });
+
+        setForm(initialForm);
+        setMessage('Owner created and saved successfully in database!');
+        loadOwners();
+      }
+    } catch (err: any) {
+      setMessage('Failed to save owner to database: ' + (err.message || String(err)));
     }
-
-    const nextOwner: OwnerRecord = {
-      initials: form.name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0])
-        .join('')
-        .toUpperCase(),
-      name: form.name.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      status: 'Active',
-      joined: 'May 17, 2024',
-      time: '10:30 AM',
-    };
-
-    setOwnerList((current) => [nextOwner, ...current]);
-    setSelectedOwner(nextOwner);
-    setForm(initialForm);
-    setMessage('Owner created and reflected in the directory.');
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-left">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-white">Owners</h1>
@@ -90,7 +140,6 @@ export default function OwnersPage() {
           </div>
           <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Filter className="h-4 w-4" /> All Status</button>
           <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Upload className="h-4 w-4" /> Export</button>
-          <button className="flex h-12 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white"><Plus className="h-5 w-5" /> Add Owner</button>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
@@ -99,133 +148,153 @@ export default function OwnersPage() {
         <StatCard label="Inactive Owners" value={String(ownerStats.inactive)} desc="Inactive accounts" icon={Plus} tone="orange" />
         <StatCard label="Invited Owners" value={String(ownerStats.invited)} desc="Pending invitations" icon={Upload} tone="purple" />
       </div>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.72fr_1.8fr]">
-        <div className="space-y-5">
-          <Panel>
-            <h2 className="text-xl font-extrabold text-white">Create Owner</h2>
-            <p className="mt-2 text-sm text-slate-300">Add a new owner to the platform.</p>
-            <div className="mt-8 space-y-5">
-              <OwnerField label="Full Name" value={form.name} onChange={(value) => updateForm('name', value)} placeholder="Enter owner full name" />
-              <OwnerField label="Email" value={form.email} onChange={(value) => updateForm('email', value)} placeholder="Enter email address" />
-              <OwnerField label="Phone" value={form.phone} onChange={(value) => updateForm('phone', value)} placeholder="Enter phone number" />
-              <OwnerField label="Password" value={form.password} onChange={(value) => updateForm('password', value)} placeholder="Enter password" type="password" />
-              <PrimaryButton onClick={createOwner}>Create Owner</PrimaryButton>
-              {message && <p className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{message}</p>}
-            </div>
-          </Panel>
-          <Panel>
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-300/15 text-cyan-200">
-                <UserCheck className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-xl font-extrabold text-white">Owner Details</h2>
-                <p className="mt-1 text-sm text-slate-300">Selected owner preview</p>
-              </div>
-            </div>
-            <div className="mt-5 rounded-lg border border-[#0d3660] bg-[#031426]/70 p-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-700/50 font-bold text-cyan-200">{selectedOwner.initials}</span>
-                <div>
-                  <p className="font-bold text-white">{selectedOwner.name}</p>
-                  <p className="text-sm text-slate-300">{selectedOwner.email}</p>
-                </div>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                <Detail label="Phone" value={selectedOwner.phone} />
-                <Detail label="Status" value={selectedOwner.status} />
-                <Detail label="Joined" value={selectedOwner.joined} />
-                <Detail label="Time" value={selectedOwner.time} />
-              </div>
-            </div>
-          </Panel>
-        </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_0.9fr]">
         <Panel>
           <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-extrabold text-white">Owner Directory</h2>
-              <p className="mt-2 text-sm text-slate-300">List of all registered owners.</p>
+            <h2 className="text-xl font-bold text-white">Owners Directory</h2>
+            <div className="flex gap-2">
+              <button className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-500/20 bg-[#071f35] text-cyan-400"><Grid2X2 className="h-5 w-5" /></button>
             </div>
-            <button className="flex h-11 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Grid2X2 className="h-4 w-4" /> Columns</button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="border-b border-[#0d3660] text-slate-400">
+            <table className="w-full min-w-[700px] text-left text-sm">
+              <thead className="bg-[#071f35]/50 text-slate-300">
                 <tr>
-                  <th className="py-3 font-medium">Name</th>
-                  <th className="py-3 font-medium">Email</th>
-                  <th className="py-3 font-medium">Phone</th>
-                  <th className="py-3 font-medium">Status</th>
-                  <th className="py-3 font-medium">Joined On</th>
-                  <th className="py-3 text-right font-medium">Actions</th>
+                  <th className="px-4 py-3.5 font-medium">Owner</th>
+                  <th className="px-4 py-3.5 font-medium">Email Address</th>
+                  <th className="px-4 py-3.5 font-medium">Contact Phone</th>
+                  <th className="px-4 py-3.5 font-medium">Onboarding Status</th>
+                  <th className="px-4 py-3.5 font-medium">Joined On</th>
+                  <th className="px-4 py-3.5 font-medium">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {ownerList.map((owner) => (
-                  <tr key={owner.email} className="border-b border-[#0d3660]/60">
-                    <td className="py-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-700/50 font-bold text-cyan-200">{owner.initials}</span>
-                        <span className="text-white">{owner.name}</span>
-                      </div>
-                    </td>
-                    <td className="text-slate-300">{owner.email}</td>
-                    <td className="text-slate-300">{owner.phone}</td>
-                    <td><StatusBadge status={owner.status} /></td>
-                    <td className="text-slate-300">{owner.joined}<br /><span className="text-xs">{owner.time}</span></td>
-                    <td className="text-right">
-                      <button
-                        onClick={() => setSelectedOwner(owner)}
-                        className="ml-auto inline-flex items-center gap-2 rounded-md border border-[#0d3660] px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:border-cyan-300"
-                      >
-                        Details
-                        <MoreVertical className="h-4 w-4 text-slate-300" />
-                      </button>
-                    </td>
+              <tbody className="divide-y divide-[#0d3660]/40">
+                {ownerList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">No registered owners found. Use the form on the right to onboard one.</td>
                   </tr>
-                ))}
+                ) : (
+                  ownerList.map((owner) => (
+                    <tr
+                      key={owner.email}
+                      onClick={() => setSelectedOwner(owner)}
+                      className={`cursor-pointer transition hover:bg-[#071f35]/30 ${
+                        selectedOwner?.email === owner.email ? 'bg-[#06b6d4]/10' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-700/40 text-sm font-extrabold text-blue-300">
+                            {owner.initials}
+                          </div>
+                          <span className="font-bold text-white">{owner.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-slate-200">{owner.email}</td>
+                      <td className="px-4 py-4 text-slate-200">{owner.phone}</td>
+                      <td className="px-4 py-4">
+                        <StatusBadge status={owner.status} />
+                      </td>
+                      <td className="px-4 py-4 text-slate-300">
+                        <div>
+                          <p className="font-medium">{owner.joined}</p>
+                          <p className="mt-0.5 text-xs text-slate-400">{owner.time}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                        <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#0d3660] text-slate-300 hover:border-cyan-400 transition">
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-          <div className="mt-5"><TablePager /></div>
+          <div className="mt-5">
+            <TablePager />
+          </div>
         </Panel>
+        <div className="space-y-5">
+          <Panel>
+            <h2 className="mb-6 text-xl font-bold text-white">Create New Owner</h2>
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-sm font-semibold text-white">Full Name</span>
+                <input
+                  value={form.name}
+                  onChange={(e) => updateForm('name', e.target.value)}
+                  placeholder="e.g. Anand Sharma"
+                  className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-semibold text-white">Email Address</span>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateForm('email', e.target.value)}
+                  placeholder="e.g. anand@gmail.com"
+                  className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-semibold text-white">Contact Phone</span>
+                <input
+                  value={form.phone}
+                  onChange={(e) => updateForm('phone', e.target.value)}
+                  placeholder="e.g. +91 9876543212"
+                  className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-semibold text-white">Password</span>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => updateForm('password', e.target.value)}
+                  placeholder="Leave blank for default: AquaOwner@2026"
+                  className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300"
+                />
+              </label>
+              {message && (
+                <p className={`text-sm font-semibold ${message.includes('success') ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {message}
+                </p>
+              )}
+              <div className="pt-2">
+                <PrimaryButton onClick={createOwner}>Register Owner</PrimaryButton>
+              </div>
+            </div>
+          </Panel>
+          {selectedOwner && (
+            <Panel>
+              <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-700/40 text-2xl font-extrabold text-blue-300">
+                  {selectedOwner.initials}
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-lg leading-tight">{selectedOwner.name}</h3>
+                  <p className="mt-1 text-sm text-slate-300">{selectedOwner.email}</p>
+                </div>
+              </div>
+              <div className="mt-6 border-t border-[#0d3660]/40 pt-5 space-y-4">
+                <div className="flex items-center gap-3 text-sm">
+                  <UserCheck className="h-5 w-5 text-cyan-300" />
+                  <span className="text-slate-350 flex-1">Status:</span>
+                  <StatusBadge status={selectedOwner.status} />
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <Upload className="h-5 w-5 text-cyan-300" />
+                  <span className="text-slate-350 flex-1">Phone:</span>
+                  <span className="text-white font-bold">{selectedOwner.phone}</span>
+                </div>
+              </div>
+            </Panel>
+          )}
+        </div>
       </div>
-    </div>
-  );
-}
-
-function OwnerField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  type?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-semibold text-white">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300"
-        placeholder={placeholder}
-      />
-    </label>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-[#0d3660] bg-[#020b18]/50 p-3">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold text-white">{value}</p>
     </div>
   );
 }

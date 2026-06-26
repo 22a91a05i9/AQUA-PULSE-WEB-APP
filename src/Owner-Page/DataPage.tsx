@@ -1,15 +1,82 @@
+import { useEffect, useState } from 'react';
 import { Download, Filter, Search } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
-const readings = Array.from({ length: 10 }, (_, index) => ({
-  temp: ['28.1', '28.3', '28.2', '28.0'][index % 4],
-  ph: ['8.2', '8.1', '8.3'][index % 3],
-  do: ['5.4', '5.6', '5.3', '5.5', '5.7'][index % 5],
-  turbidity: [24, 26, 25, 23][index % 4],
-  conductivity: [482, 479, 485, 480, 478, 483, 481][index % 7],
-  time: `10:${String(30 - index).padStart(2, '0')}:${index === 0 ? '40' : '00'} AM`,
-}));
+type ReadingItem = {
+  deviceId: string;
+  pond: string;
+  temp: string;
+  ph: string;
+  do: string;
+  turbidity: string;
+  conductivity: string;
+  time: string;
+};
 
 export default function DataPage() {
+  const [readingsList, setReadingsList] = useState<ReadingItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const session = getAuthSession();
+        if (session) {
+          const res = await apiRequest<any>('/owner/overview', {
+            token: session.token,
+          });
+          const devices = res.devices || [];
+          const sites = res.sites || [];
+          const recentReadings = res.recent_readings || [];
+
+          const mapped: ReadingItem[] = recentReadings.map((r: any) => {
+            const devObj = devices.find((d: any) => d.id === r.device_id);
+            const siteObj = sites.find((s: any) => s.id === r.site_id);
+            const devUid = devObj ? devObj.device_uid : `DVC-${r.device_id}`;
+            const siteName = siteObj ? siteObj.name : (r.site_id ? `Site #${r.site_id}` : 'Unassigned');
+            
+            const tempVal = r.temperature_c != null ? Number(r.temperature_c).toFixed(2) : 'N/A';
+            const phVal = r.ph != null ? Number(r.ph).toFixed(2) : 'N/A';
+            const doVal = r.temperature_c != null ? (8.5 - (Number(r.temperature_c) - 20) * 0.15).toFixed(1) : '5.4'; // static/calculated
+            const turbidityVal = r.turbidity != null ? Math.round(Number(r.turbidity)).toString() : 'N/A';
+            const conductivityVal = '480'; // static value not in live data
+            
+            const timeStr = r.collected_at 
+              ? new Date(r.collected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+              : 'Just now';
+
+            return {
+              deviceId: devUid,
+              pond: siteName,
+              temp: tempVal,
+              ph: phVal,
+              do: doVal,
+              turbidity: turbidityVal,
+              conductivity: conductivityVal,
+              time: timeStr,
+            };
+          });
+
+          setReadingsList(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to load readings:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 animate-fade-in">
       <section className="glass rounded-xl p-7">
@@ -32,38 +99,45 @@ export default function DataPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[920px] text-left">
-            <thead className="text-slate-300">
+            <thead className="text-slate-350 bg-[#071f35]/50 uppercase text-xs tracking-wide">
               <tr>
-                <th className="py-4 text-lg font-medium">Device ID</th>
-                <th className="text-lg font-medium">Pond</th>
-                <th className="text-lg font-medium">Temp (deg C)</th>
-                <th className="text-lg font-medium">pH</th>
-                <th className="text-lg font-medium">DO (mg/L)</th>
-                <th className="text-lg font-medium">Turbidity (NTU)</th>
-                <th className="text-lg font-medium">Conductivity (uS/cm)</th>
-                <th className="text-lg font-medium">Time</th>
+                <th className="py-4 px-4 font-bold">Device ID</th>
+                <th className="font-bold">Pond</th>
+                <th className="font-bold">Temp (deg C)</th>
+                <th className="font-bold">pH</th>
+                <th className="font-bold">DO (mg/L)</th>
+                <th className="font-bold">Turbidity (NTU)</th>
+                <th className="font-bold">Conductivity (uS/cm)</th>
+                <th className="font-bold">Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#0d3660]/70">
-              {readings.map((reading, index) => (
-                <tr key={index}>
-                  <td className="py-5 text-xl text-white">DVC-001</td>
-                  <td className="text-xl text-white">Pond 01</td>
-                  <td className="text-xl text-cyan-300">{reading.temp}</td>
-                  <td className="text-xl text-lime-400">{reading.ph}</td>
-                  <td className="text-xl text-sky-300">{reading.do}</td>
-                  <td className="text-xl text-purple-300">{reading.turbidity}</td>
-                  <td className="text-xl text-cyan-300">{reading.conductivity}</td>
-                  <td className="text-lg text-slate-300">{reading.time}</td>
+              {readingsList.map((reading, index) => (
+                <tr key={index} className="hover:bg-[#071f35]/25 transition">
+                  <td className="py-5 px-4 text-lg text-white font-semibold">{reading.deviceId}</td>
+                  <td className="text-lg text-white font-medium">{reading.pond}</td>
+                  <td className="text-lg text-cyan-300 font-bold">{reading.temp}</td>
+                  <td className="text-lg text-lime-400 font-bold">{reading.ph}</td>
+                  <td className="text-lg text-sky-300 font-bold">{reading.do} <span className="text-xs text-slate-500 font-normal">(calc)</span></td>
+                  <td className="text-lg text-purple-300 font-bold">{reading.turbidity}</td>
+                  <td className="text-lg text-cyan-300/80 font-bold">{reading.conductivity} <span className="text-xs text-slate-500 font-normal">(static)</span></td>
+                  <td className="text-base text-slate-300">{reading.time}</td>
                 </tr>
               ))}
+              {readingsList.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                    No recent readings loaded from database.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
         <div className="mt-5 flex items-center justify-between text-slate-300">
-          <p>Showing 1 to 10 of 200 readings</p>
+          <p>Showing {readingsList.length} of {readingsList.length} readings</p>
           <div className="flex gap-2">
-            {['‹', '1', '2', '3', '...', '20', '›'].map((page) => (
+            {['‹', '1', '›'].map((page) => (
               <button key={page} className={`h-10 min-w-10 rounded-lg border border-[#0d3660] px-3 ${page === '1' ? 'bg-blue-600 text-white' : 'text-slate-300'}`}>
                 {page}
               </button>

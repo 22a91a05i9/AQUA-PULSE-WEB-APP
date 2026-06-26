@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -23,10 +23,13 @@ import {
   Waves,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 type AlertTone = 'Critical' | 'Warning' | 'Info' | 'Resolved';
 
 type AlertRow = {
+  id: number;
   title: string;
   site: string;
   metric: string;
@@ -41,18 +44,6 @@ type AlertRow = {
   description: string;
 };
 
-const activeAlerts: AlertRow[] = [
-  { title: 'DVC-003 - Dissolved Oxygen Low', site: 'Pond 03  -  Central Farm', metric: 'DO: 2.1 mg/L    down 52%', time: '10 min ago', tone: 'Critical', deviceId: 'DVC-003', alertType: 'Dissolved Oxygen Low', deviceType: 'Water Quality Monitor', pond: 'Pond 03', farm: 'Central Farm', firmware: 'v2.4.1', description: 'Dissolved Oxygen level is below the threshold limit. Immediate action required.' },
-  { title: 'DVC-007 - pH Level High', site: 'Pond 01  -  North Lake Farm', metric: 'pH: 8.9    up 15%', time: '25 min ago', tone: 'Critical', deviceId: 'DVC-007', alertType: 'pH Level High', deviceType: 'pH Sensor', pond: 'Pond 01', farm: 'North Lake Farm', firmware: 'v2.2.0', description: 'pH level is above the safe operating range. Check water treatment and buffering schedule.' },
-  { title: 'DVC-005 - High Turbidity', site: 'Pond 02  -  Sunrise Aqua Park', metric: 'Turbidity: 86 NTU', time: '1 hr ago', tone: 'Warning', deviceId: 'DVC-005', alertType: 'High Turbidity', deviceType: 'Turbidity Sensor', pond: 'Pond 02', farm: 'Sunrise Aqua Park', firmware: 'v2.3.4', description: 'Turbidity has exceeded the preferred range. Inspect aeration, feed residue, and pond inflow.' },
-];
-
-const occurredAlerts: AlertRow[] = [
-  { title: 'DVC-001 - Device Battery Low', site: 'Pond 01  -  North Farm', metric: 'Battery: 15%', time: '2 hr ago', tone: 'Info', deviceId: 'DVC-001', alertType: 'Device Battery Low', deviceType: 'Temperature Sensor', pond: 'Pond 01', farm: 'North Farm', firmware: 'v2.5.1', description: 'Battery has dropped below the recommended reserve level. Schedule replacement or recharge.' },
-  { title: 'DVC-004 - Water Quality Normal', site: 'Pond 04  -  West Farm', metric: 'All parameters normal', time: '3 hr ago', tone: 'Resolved', deviceId: 'DVC-004', alertType: 'Water Quality Normal', deviceType: 'Water Quality Sensor', pond: 'Pond 04', farm: 'West Farm', firmware: 'v2.4.2', description: 'All monitored parameters returned to normal operating limits.' },
-  { title: 'System - Maintenance Scheduled', site: 'All Sites', metric: 'Maintenance window', time: 'May 17, 09:00 PM', tone: 'Info', deviceId: 'SYSTEM', alertType: 'Maintenance Scheduled', deviceType: 'System Notice', pond: 'All Sites', farm: 'All Sites', firmware: 'Platform', description: 'Scheduled maintenance window has been created for device inspection and calibration.' },
-];
-
 const toneStyles: Record<AlertTone, { text: string; bg: string; border: string; icon: LucideIcon }> = {
   Critical: { text: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/50', icon: Bell },
   Warning: { text: 'text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/50', icon: AlertTriangle },
@@ -62,24 +53,102 @@ const toneStyles: Record<AlertTone, { text: string; bg: string; border: string; 
 
 export default function AlertsPage() {
   const [selectedAlert, setSelectedAlert] = useState<AlertRow | null>(null);
+  const [alerts, setAlerts] = useState<AlertRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  async function loadAlerts() {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+
+      const res = await apiRequest<any[]>('/readings/alerts/me', {
+        token: session.token,
+      });
+
+      const mapped: AlertRow[] = res.map((a: any) => {
+        let tone: AlertTone = 'Info';
+        if (a.status === 'resolved' || a.status === 'acknowledged') {
+          tone = 'Resolved';
+        } else if (a.severity === 'critical') {
+          tone = 'Critical';
+        } else if (a.severity === 'warning') {
+          tone = 'Warning';
+        }
+
+        return {
+          id: a.id,
+          title: a.title || 'Water Quality Alert',
+          site: a.site_id ? `Site ID #${a.site_id}` : 'System Alert',
+          metric: `${a.metric || 'Value'}: ${a.actual_value !== undefined ? a.actual_value.toFixed(1) : 'N/A'}`,
+          time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(a.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+          tone,
+          deviceId: String(a.device_id),
+          alertType: a.title || 'Alert',
+          deviceType: `${a.metric || 'Sensor'} Monitor`,
+          pond: a.site_id ? `Site #${a.site_id}` : 'System-wide',
+          farm: a.site_id ? `Farm Site #${a.site_id}` : 'System-wide',
+          firmware: 'v2.0.0',
+          description: a.message || 'Water parameter limit exceeded.',
+        };
+      });
+
+      setAlerts(mapped);
+    } catch (err) {
+      console.error('Failed to load alerts:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAlerts();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   if (selectedAlert) {
     return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} />;
   }
 
+  const filtered = alerts.filter(a => 
+    a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    a.site.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    a.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const activeAlerts = filtered.filter(a => a.tone === 'Critical' || a.tone === 'Warning' || a.tone === 'Info');
+  const occurredAlerts = filtered.filter(a => a.tone === 'Resolved');
+
+  const criticalCount = alerts.filter(a => a.tone === 'Critical').length;
+  const warningCount = alerts.filter(a => a.tone === 'Warning').length;
+  const infoCount = alerts.filter(a => a.tone === 'Info').length;
+  const resolvedCount = alerts.filter(a => a.tone === 'Resolved').length;
+
   return (
     <div className="animate-fade-in space-y-5">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <AlertSummary tone="Critical" label="Critical Alerts" value="8" desc="Immediate action required" />
-        <AlertSummary tone="Warning" label="Warnings" value="12" desc="Attention needed" />
-        <AlertSummary tone="Info" label="Info Alerts" value="6" desc="For your information" />
-        <AlertSummary tone="Resolved" label="Resolved" value="24" desc="Last 7 days" />
+        <AlertSummary tone="Critical" label="Critical Alerts" value={String(criticalCount)} desc="Immediate action required" />
+        <AlertSummary tone="Warning" label="Warnings" value={String(warningCount)} desc="Attention needed" />
+        <AlertSummary tone="Info" label="Info Alerts" value={String(infoCount)} desc="For your information" />
+        <AlertSummary tone="Resolved" label="Resolved" value={String(resolvedCount)} desc="Active & archived alerts" />
       </div>
 
       <div className="flex flex-wrap gap-3">
         <div className="relative min-w-[320px] flex-1">
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-300" />
-          <input className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/55 pl-12 pr-4 text-sm text-white outline-none placeholder:text-slate-400" placeholder="Search alerts by device, pond or site..." />
+          <input 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/55 pl-12 pr-4 text-sm text-white outline-none placeholder:text-slate-400" 
+            placeholder="Search alerts by device, pond or site..." 
+          />
         </div>
         {['All Severities', 'All Sites', 'All Statuses'].map((label) => (
           <button key={label} className="flex h-12 min-w-48 items-center justify-between rounded-lg border border-[#0d3660] bg-[#020b18]/55 px-4 text-sm font-semibold text-white">
@@ -96,28 +165,36 @@ export default function AlertsPage() {
       </div>
 
       <section className="glass overflow-hidden rounded-lg">
-        <h2 className="border-b border-[#0d3660] px-5 py-4 text-sm font-bold text-red-400">ACTIVE ALERTS (3)</h2>
+        <h2 className="border-b border-[#0d3660] px-5 py-4 text-sm font-bold text-red-400">ACTIVE ALERTS ({activeAlerts.length})</h2>
         <div className="divide-y divide-[#0d3660]/60 px-5">
-          {activeAlerts.map((alert) => (
-            <AlertListRow key={alert.title} alert={alert} onClick={() => setSelectedAlert(alert)} />
-          ))}
+          {activeAlerts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">No active alerts</p>
+          ) : (
+            activeAlerts.map((alert) => (
+              <AlertListRow key={alert.id} alert={alert} onClick={() => setSelectedAlert(alert)} />
+            ))
+          )}
         </div>
       </section>
 
       <section>
-        <h2 className="px-5 pb-1 text-sm font-bold text-cyan-300">OCCURRED (3)</h2>
+        <h2 className="px-5 pb-1 text-sm font-bold text-cyan-300">HISTORICAL / RESOLVED ({occurredAlerts.length})</h2>
         <div className="glass divide-y divide-[#0d3660]/60 rounded-lg px-5">
-          {occurredAlerts.map((alert) => (
-            <AlertListRow key={alert.title} alert={alert} onClick={() => setSelectedAlert(alert)} />
-          ))}
+          {occurredAlerts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">No historical alerts</p>
+          ) : (
+            occurredAlerts.map((alert) => (
+              <AlertListRow key={alert.id} alert={alert} onClick={() => setSelectedAlert(alert)} />
+            ))
+          )}
         </div>
       </section>
 
       <div className="flex items-center justify-between text-sm text-white">
-        <span>Showing 1 to 6 of 6 alerts</span>
+        <span>Showing {filtered.length} of {alerts.length} alerts</span>
         <div className="flex items-center gap-3">
           <button className="flex h-10 w-10 items-center justify-center rounded-md border border-[#0d3660] text-slate-400"><ChevronLeft className="h-4 w-4" /></button>
-          <button className="h-10 w-10 rounded-md bg-blue-600 font-bold">1</button>
+          <button className="h-10 w-10 bg-blue-600 font-bold rounded-md">1</button>
           <button className="flex h-10 w-10 items-center justify-center rounded-md border border-[#0d3660] text-slate-400"><ChevronRight className="h-4 w-4" /></button>
           <span className="ml-8">Rows per page</span>
           <button className="h-10 rounded-md border border-[#0d3660] px-4">10</button>
@@ -142,9 +219,6 @@ function AlertSummary({ tone, label, value, desc }: { tone: AlertTone; label: st
           <p className="mt-2 text-3xl font-bold text-white">{value}</p>
           <p className="mt-3 text-sm text-white">{desc}</p>
         </div>
-        <svg viewBox="0 0 90 36" className={`mt-12 h-9 w-24 ${style.text}`} fill="none">
-          <path d="M2 28 L12 27 L22 18 L32 23 L42 12 L52 31 L62 15 L72 7 L82 18 L90 10" stroke="currentColor" strokeWidth="2" />
-        </svg>
       </div>
     </section>
   );
@@ -162,11 +236,11 @@ function AlertListRow({ alert, onClick }: { alert: AlertRow; onClick?: () => voi
         </div>
         <div>
           <p className="font-bold text-white">{alert.title}</p>
-          <p className="mt-1 text-slate-300">{alert.site}</p>
+          <p className="mt-1 text-slate-350 text-xs">{alert.site}</p>
           <p className={`mt-1 font-bold ${style.text}`}>{alert.metric}</p>
         </div>
       </div>
-      <span className={`font-semibold ${style.text}`}>{alert.time}</span>
+      <span className={`font-semibold text-xs ${style.text}`}>{alert.time}</span>
       <div className="flex items-center gap-8">
         <span className={`rounded-md border px-3 py-1 text-sm font-bold ${style.border} ${style.text}`}>{alert.tone}</span>
         <ChevronRight className="h-5 w-5 text-white" />
@@ -182,9 +256,7 @@ function AlertDetails({ alert, onBack }: { alert: AlertRow; onBack: () => void }
     ['Alert Type', alert.alertType, AlertTriangle],
     ['Severity', alert.tone, Shield],
     ['Status', alert.tone === 'Resolved' ? 'Resolved' : 'Active', Waves],
-    ['Triggered At', 'May 18, 2024 - 10:21 AM', Clock3],
-    ['Acknowledged At', alert.tone === 'Info' ? 'Pending' : 'May 18, 2024 - 10:31 AM', CheckCircle2],
-    ['Acknowledged By', 'Rahul Verma', UserRound],
+    ['Triggered At', alert.time, Clock3],
     ['Category', alert.deviceId === 'SYSTEM' ? 'Maintenance' : 'Water Quality', Folder],
     ['Description', alert.description, FileText],
   ];
@@ -194,8 +266,6 @@ function AlertDetails({ alert, onBack }: { alert: AlertRow; onBack: () => void }
     ['Device Type', alert.deviceType, Microscope],
     ['Site', alert.farm, MapPin],
     ['Pond', alert.pond, Waves],
-    ['Last Seen', 'May 18, 2024 - 10:21 AM', Clock3],
-    ['Firmware Version', alert.firmware, Cpu],
   ];
 
   return (
@@ -221,7 +291,7 @@ function AlertDetails({ alert, onBack }: { alert: AlertRow; onBack: () => void }
             <p className="mt-2 text-white">{alert.pond} <span className="mx-4">-</span> {alert.farm}</p>
             <p className={`mt-4 font-bold ${style.text}`}>{alert.metric}</p>
           </div>
-          <span className={`text-lg font-bold ${style.text}`}>{alert.time}</span>
+          <span className={`text-sm font-bold ${style.text}`}>{alert.time}</span>
         </div>
       </section>
 
@@ -236,45 +306,8 @@ function AlertDetails({ alert, onBack }: { alert: AlertRow; onBack: () => void }
             <h3 className="mb-4 text-lg font-bold text-white">Device Information</h3>
             <InfoList items={deviceInfo} />
           </section>
-          <section className="glass rounded-lg p-5">
-            <h3 className="mb-4 text-lg font-bold text-white">Additional Actions</h3>
-            <button className="flex w-full items-center justify-between border-t border-[#0d3660]/60 py-4 text-white"><span className="flex items-center gap-4"><Cpu className="h-5 w-5 text-cyan-300" />View Device Dashboard</span><ChevronRight /></button>
-            <button className="flex w-full items-center justify-between border-t border-[#0d3660]/60 py-4 text-white"><span className="flex items-center gap-4"><Waves className="h-5 w-5 text-cyan-300" />View Live Monitoring</span><ChevronRight /></button>
-          </section>
-          <section className="glass flex items-center justify-between rounded-lg p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-600/40">
-                <Mail className="h-7 w-7 text-white" />
-              </div>
-              <p className="max-w-md text-lg text-white">Got a tele call or SMS and Email to assigned contacts immediately.</p>
-            </div>
-            <button className="rounded-lg border border-cyan-400 px-5 py-3 font-semibold text-cyan-300">Manage Contacts</button>
-          </section>
         </div>
       </div>
-
-      <section className="glass rounded-lg p-5">
-        <h3 className="mb-5 text-lg font-bold text-white">Alert Timeline</h3>
-        {[
-          ['Alert Triggered', 'Dissolved Oxygen level dropped below threshold (2.5 mg/L)', '10:21 AM'],
-          ['Alert Acknowledged', 'Acknowledged by Rahul Verma', '10:31 AM'],
-          ['Investigating', 'Issue is under investigation', '10:35 AM'],
-        ].map(([title, desc, time], index) => (
-          <div key={title} className="grid grid-cols-[36px_1fr_auto] gap-4 pb-4 text-sm">
-            <div className={`flex h-7 w-7 items-center justify-center rounded-full ${index === 0 ? 'bg-red-500 text-white' : index === 1 ? 'bg-amber-500 text-black' : 'bg-sky-500 text-white'}`}>{index + 1}</div>
-            <div>
-              <p className="font-bold text-white">{title}</p>
-              <p className="mt-1 text-slate-300">{desc}</p>
-            </div>
-            <p className="text-right text-white">{time}<br />May 18, 2024</p>
-          </div>
-        ))}
-      </section>
-
-      <button className="flex h-12 w-full items-center justify-center gap-3 rounded-lg bg-gradient-to-r from-sky-500 to-blue-700 font-bold text-white">
-        <Send className="h-5 w-5" />
-        Send Tele Alert
-      </button>
     </div>
   );
 }
@@ -286,7 +319,7 @@ function InfoList({ items }: { items: Array<[string, string, LucideIcon]> }) {
         <div key={label} className="grid grid-cols-[32px_1fr_1.1fr] items-start gap-4 py-3 text-sm">
           <Icon className="h-5 w-5 text-cyan-300" />
           <span className="text-white">{label}</span>
-          <span className="text-right text-white">{value}</span>
+          <span className="text-right text-white font-medium">{value}</span>
         </div>
       ))}
     </div>

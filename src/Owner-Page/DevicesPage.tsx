@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Battery,
@@ -16,11 +16,14 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 type DeviceStatus = 'Online' | 'Warning' | 'Offline';
 
 type Device = {
   id: string;
+  dbId: number;
   name: string;
   version: string;
   status: DeviceStatus;
@@ -31,18 +34,17 @@ type Device = {
   seen: string;
   battery: number;
   batteryLabel: string;
+  latest_reading?: {
+    temperature_c: number;
+    ph: number;
+    turbidity: number;
+    collected_at: string;
+    battery_v: number | null;
+    signal_dbm: number | null;
+  } | null;
 };
 
-const devices: Device[] = [
-  { id: 'DVC-001', name: 'Temperature Sensor 1', version: 'v2', status: 'Online', site: 'North Farm', pond: 'Pond 01', agent: 'Agent-001', area: 'Area 1', seen: '2 min ago', battery: 96, batteryLabel: 'Excellent' },
-  { id: 'DVC-002', name: 'pH Sensor 1', version: 'v2', status: 'Online', site: 'East Farm', pond: 'Pond 02', agent: 'Agent-002', area: 'Area 1', seen: '3 min ago', battery: 92, batteryLabel: 'Excellent' },
-  { id: 'DVC-003', name: 'DO Sensor 1', version: 'v1', status: 'Online', site: 'Central Farm', pond: 'Pond 03', agent: 'Agent-003', area: 'Area 2', seen: '5 min ago', battery: 88, batteryLabel: 'Good' },
-  { id: 'DVC-004', name: 'Turbidity Sensor 1', version: 'v1', status: 'Warning', site: 'South Farm', pond: 'Pond 04', agent: 'Agent-004', area: 'Area 2', seen: '11 min ago', battery: 72, batteryLabel: 'Fair' },
-  { id: 'DVC-005', name: 'Water Level Sensor', version: 'v2', status: 'Offline', site: 'West Farm', pond: 'Pond 05', agent: 'Agent-005', area: 'Area 3', seen: '1 hr ago', battery: 0, batteryLabel: 'Offline' },
-  { id: 'DVC-006', name: 'Ammonia Sensor', version: 'v1', status: 'Online', site: 'North Farm', pond: 'Pond 06', agent: 'Agent-001', area: 'Area 1', seen: '2 min ago', battery: 94, batteryLabel: 'Excellent' },
-  { id: 'DVC-007', name: 'Temperature Sensor 2', version: 'v2', status: 'Online', site: 'East Farm', pond: 'Pond 07', agent: 'Agent-002', area: 'Area 1', seen: '4 min ago', battery: 90, batteryLabel: 'Excellent' },
-  { id: 'DVC-008', name: 'pH Sensor 2', version: 'v1', status: 'Warning', site: 'Central Farm', pond: 'Pond 08', agent: 'Agent-003', area: 'Area 2', seen: '8 min ago', battery: 68, batteryLabel: 'Fair' },
-];
+const defaultDevices: Device[] = [];
 
 const statusClass: Record<DeviceStatus, string> = {
   Online: 'text-emerald-400',
@@ -50,21 +52,98 @@ const statusClass: Record<DeviceStatus, string> = {
   Offline: 'text-red-400',
 };
 
+function formatSeen(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+}
+
 export default function DevicesPage() {
+  const [deviceList, setDeviceList] = useState<Device[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+
+  useEffect(() => {
+    async function fetchDevices() {
+      try {
+        const session = getAuthSession();
+        if (session) {
+          const res = await apiRequest<any>('/owner/overview', {
+            token: session.token,
+          });
+          const mappedDevices: Device[] = (res.devices || []).map((d: any) => {
+            const siteObj = (res.sites || []).find((s: any) => s.id === d.site_id);
+            const siteName = siteObj ? siteObj.name : 'Unassigned';
+            
+            let battery = 95;
+            if (d.latest_reading && d.latest_reading.battery_v != null) {
+              const v = d.latest_reading.battery_v;
+              if (v >= 4.2) battery = 100;
+              else if (v <= 3.0) battery = 0;
+              else battery = Math.round(((v - 3.0) / (4.2 - 3.0)) * 100);
+            }
+            
+            let batteryLabel = 'Excellent';
+            if (battery < 20) batteryLabel = 'Critical';
+            else if (battery < 50) batteryLabel = 'Fair';
+            else if (battery < 80) batteryLabel = 'Good';
+
+            return {
+              id: d.device_uid || 'DVC-UNKNOWN',
+              dbId: d.id,
+              name: `Sensor Device ${(d.device_uid || '').slice(-4)}`,
+              version: d.firmware_version || 'v2',
+              status: d.status === 'active' ? 'Online' : 'Offline',
+              site: siteName,
+              pond: siteName,
+              agent: 'Unassigned',
+              area: 'Area 1',
+              seen: formatSeen(d.latest_reading?.collected_at),
+              battery,
+              batteryLabel,
+              latest_reading: d.latest_reading,
+            };
+          });
+          setDeviceList(mappedDevices);
+        }
+      } catch (err) {
+        console.error('Failed to load devices: ', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDevices();
+  }, []);
 
   if (selectedDevice) {
     return <DeviceDetails device={selectedDevice} onBack={() => setSelectedDevice(null)} />;
   }
 
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const onlineCount = deviceList.filter((d) => d.status === 'Online').length;
+  const offlineCount = deviceList.filter((d) => d.status === 'Offline').length;
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <StatCard icon={Cpu} label="Total Devices" value="32" tone="cyan" desc="+18% vs last month" />
-        <StatCard icon={Wifi} label="Online" value="24" tone="green" desc="+20% vs last month" />
-        <StatCard icon={Zap} label="Warning" value="3" tone="amber" desc="-25% vs last month" />
-        <StatCard icon={WifiOff} label="Offline" value="3" tone="purple" desc="-25% vs last month" />
-        <StatCard icon={Wrench} label="Maintenance" value="2" tone="slate" desc="-33% vs last month" />
+        <StatCard icon={Cpu} label="Total Devices" value={String(deviceList.length)} tone="cyan" desc="From database" />
+        <StatCard icon={Wifi} label="Online" value={String(onlineCount)} tone="green" desc="Active status" />
+        <StatCard icon={Zap} label="Warning" value="0" tone="amber" desc="0 warnings" />
+        <StatCard icon={WifiOff} label="Offline" value={String(offlineCount)} tone="purple" desc="Inactive status" />
+        <StatCard icon={Wrench} label="Maintenance" value="0" tone="slate" desc="0 queued" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[#0d3660]/60 pt-5">
@@ -103,7 +182,7 @@ export default function DevicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#0d3660]/60">
-              {devices.map((device) => (
+              {deviceList.map((device) => (
                 <tr key={device.id} onClick={() => setSelectedDevice(device)} className="cursor-pointer transition hover:bg-[#071f35]/40">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-4">
@@ -131,7 +210,7 @@ export default function DevicesPage() {
                   </td>
                   <td>
                     <p className={device.status === 'Offline' ? 'font-bold text-red-400' : 'font-bold text-emerald-400'}>{device.seen}</p>
-                    <p className="mt-1 text-slate-300">May 18, 10:32 AM</p>
+                    <p className="mt-1 text-slate-300">Just now</p>
                   </td>
                   <td>
                     <p className={device.battery === 0 ? 'text-red-400' : device.battery < 75 ? 'text-amber-400' : 'text-white'}>
@@ -155,15 +234,16 @@ export default function DevicesPage() {
 }
 
 function DeviceDetails({ device, onBack }: { device: Device; onBack: () => void }) {
+  const latest = device.latest_reading;
   const metrics = [
-    ['Temperature', '23.5 deg C', 'Normal'],
-    ['pH', '7.25', 'Normal'],
-    ['Dissolved Oxygen', '8.2 mg/L', 'Normal'],
-    ['Turbidity', '86 NTU', 'Normal'],
-    ['Conductivity', '520 uS/cm', 'Normal'],
-    ['Salinity', '0.5 PSU', 'Normal'],
-    ['Battery Level', '78%', 'Good'],
-    ['Data Interval', '10 min', ''],
+    ['Temperature', latest ? `${latest.temperature_c} °C` : 'N/A', latest ? 'Normal' : 'No Data'],
+    ['pH', latest ? `${latest.ph}` : 'N/A', latest ? 'Normal' : 'No Data'],
+    ['Turbidity', latest ? `${latest.turbidity} NTU` : 'N/A', latest ? 'Normal' : 'No Data'],
+    ['Battery Level', `${device.battery}%`, device.batteryLabel],
+    ['Signal Strength', latest?.signal_dbm != null ? `${latest.signal_dbm} dBm` : 'N/A', latest?.signal_dbm != null ? 'Strong' : ''],
+    ['Dissolved Oxygen', 'Not Equipped', 'N/A'],
+    ['Conductivity', 'Not Equipped', 'N/A'],
+    ['Salinity', 'Not Equipped', 'N/A'],
   ];
 
   return (
@@ -173,7 +253,9 @@ function DeviceDetails({ device, onBack }: { device: Device; onBack: () => void 
           <ArrowLeft className="h-6 w-6" />
         </button>
         <div>
-          <h2 className="text-3xl font-extrabold text-white">{device.id} <span className="text-base text-emerald-400">● Online</span></h2>
+          <h2 className="text-3xl font-extrabold text-white">
+            {device.id} <span className={device.status === 'Online' ? 'text-emerald-400 text-base' : 'text-red-400 text-base'}>● {device.status}</span>
+          </h2>
           <p className="mt-2 text-slate-300">Devices &gt; {device.id}</p>
         </div>
       </div>
@@ -184,16 +266,16 @@ function DeviceDetails({ device, onBack }: { device: Device; onBack: () => void 
             <Cpu className="h-10 w-10" />
           </div>
           <div>
-            <p className="text-2xl font-extrabold text-white">{device.id} <span className="rounded bg-cyan-500/20 px-2 py-1 text-xs text-cyan-300">v2.5.1</span></p>
+            <p className="text-2xl font-extrabold text-white">{device.id} <span className="rounded bg-cyan-500/20 px-2 py-1 text-xs text-cyan-300">{device.version}</span></p>
             <p className="mt-2 text-slate-300">Aquasense Pro</p>
-            <p className="mt-1 text-slate-400">AS-PRO-1001</p>
+            <p className="mt-1 text-slate-400">AS-PRO-{(device.id || '').slice(-4)}</p>
           </div>
         </div>
-        <DetailTop label="Status" value="Online" tone="text-emerald-400" />
-        <DetailTop label="Signal Strength" value="85%" icon={SignalHigh} />
-        <DetailTop label="Last Seen" value="2 min ago" />
-        <DetailTop label="Firmware" value="v2.5.1" />
-        <DetailTop label="Agent" value="Agent-001" icon={UserRound} />
+        <DetailTop label="Status" value={device.status} tone={device.status === 'Online' ? 'text-emerald-400' : 'text-red-400'} />
+        <DetailTop label="Temperature" value={latest ? `${latest.temperature_c} °C` : 'N/A'} tone={latest ? 'text-cyan-300' : 'text-slate-400'} />
+        <DetailTop label="pH" value={latest ? `${latest.ph}` : 'N/A'} tone={latest ? 'text-lime-300' : 'text-slate-400'} />
+        <DetailTop label="Turbidity" value={latest ? `${latest.turbidity} NTU` : 'N/A'} tone={latest ? 'text-purple-300' : 'text-slate-400'} />
+        <DetailTop label="Battery Level" value={`${device.battery}%`} tone="text-white" />
       </section>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_1fr]">

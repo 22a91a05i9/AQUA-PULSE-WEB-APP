@@ -1,40 +1,117 @@
-import { useState } from 'react';
-import { BadgePlus, BarChart3, ChevronDown, Mail, Phone, UserPlus, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BadgePlus, ChevronDown, Mail, Phone, UserPlus, UserRound, KeyRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 const initialForm = {
   name: '',
   phone: '',
   email: '',
-  role: 'Agent',
-  reportingTo: '',
-  division: '',
-  region: '',
-  status: 'Active',
-  sites: '',
+  password: 'agentpassword123',
+  farmTypeId: '',
+  speciesId: '',
 };
 
-export default function AddAgentPage({ onBack: _onBack }: { onBack: () => void }) {
+export default function AddAgentPage({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [farmTypes, setFarmTypes] = useState<any[]>([]);
+  const [allSpecies, setAllSpecies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadMeta() {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+
+      const [typesRes, speciesRes] = await Promise.all([
+        apiRequest<any[]>('/meta/farm-types', { token: session.token }),
+        apiRequest<any[]>('/meta/species', { token: session.token }),
+      ]);
+
+      setFarmTypes(typesRes);
+      setAllSpecies(speciesRes);
+    } catch (err) {
+      console.error('Failed to load metadata:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadMeta();
+  }, []);
 
   const updateField = (field: keyof typeof form, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      // If farm type changes, reset species selection
+      if (field === 'farmTypeId') {
+        next.speciesId = '';
+      }
+      return next;
+    });
     setMessage('');
+    setErrorMsg('');
   };
 
-  const submitAgent = () => {
-    if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || !form.reportingTo) {
-      setMessage('Enter agent details and reporting information before creating the agent.');
+  const submitAgent = async () => {
+    if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || !form.password.trim() || !form.farmTypeId || !form.speciesId) {
+      setErrorMsg('Please enter all required fields.');
       return;
     }
 
-    setMessage(`${form.name.trim()} has been created successfully.`);
-    setForm(initialForm);
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+
+      await apiRequest('/owner/agents', {
+        method: 'POST',
+        token: session.token,
+        body: {
+          full_name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          password: form.password.trim(),
+          farm_type_id: Number(form.farmTypeId),
+          species_id: Number(form.speciesId),
+        },
+      });
+
+      setMessage(`Agent "${form.name.trim()}" has been created successfully.`);
+      setErrorMsg('');
+      setForm(initialForm);
+      setTimeout(() => {
+        onBack();
+      }, 1500);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || 'Failed to create agent.');
+    }
   };
 
+  // Filter species based on the selected farm type
+  const filteredSpecies = allSpecies.filter(s => String(s.farm_type_id) === form.farmTypeId);
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in text-left max-w-4xl mx-auto">
+      <button 
+        onClick={onBack}
+        className="mb-4 text-sm font-semibold text-cyan-300 hover:text-cyan-200 transition-colors"
+      >
+        &larr; Back to Agents
+      </button>
+
       <section className="glass rounded-lg p-5">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3 flex h-24 w-24 items-center justify-center rounded-full border border-[#0d3660] bg-cyan-400/5">
@@ -70,77 +147,43 @@ export default function AddAgentPage({ onBack: _onBack }: { onBack: () => void }
               onChange={(value) => updateField('email', value)}
               placeholder="agent@example.com"
             />
-          </div>
-        </FormPanel>
-
-        <FormPanel number="2" title="Address">
-          <div className="grid grid-cols-1 gap-x-8 gap-y-5 xl:grid-cols-2">
-            <SelectLike
-              icon={UserRound}
-              label="Role"
+            <Field
+              icon={KeyRound}
+              label="Password (min 8 chars)"
               required
-              value={form.role}
-              onChange={(value) => updateField('role', value)}
-              options={['Agent', 'Senior Agent', 'Field Lead']}
-              placeholder="Agent"
-            />
-            <SelectLike
-              icon={BarChart3}
-              label="Reporting To"
-              required
-              value={form.reportingTo}
-              onChange={(value) => updateField('reportingTo', value)}
-              options={['Rahul Verma', 'Operations Manager', 'Regional Head']}
-              placeholder="Select reporting type"
+              value={form.password}
+              onChange={(value) => updateField('password', value)}
+              placeholder="password"
             />
           </div>
         </FormPanel>
 
-        <FormPanel number="3" title="Access">
+        <FormPanel number="2" title="Farming Specialization">
           <div className="grid grid-cols-1 gap-x-8 gap-y-5 xl:grid-cols-2">
             <SelectLike
               icon={BadgePlus}
-              label="Division"
-              value={form.division}
-              onChange={(value) => updateField('division', value)}
-              options={['South India', 'North Division', 'East Coast']}
-              placeholder="Select division"
-            />
-            <SelectLike
-              icon={BadgePlus}
-              label="Region"
-              value={form.region}
-              onChange={(value) => updateField('region', value)}
-              options={['Andhra Pradesh', 'Tamil Nadu', 'Odisha']}
-              placeholder="Select region"
-            />
-          </div>
-        </FormPanel>
-
-        <FormPanel number="4" title="Status">
-          <div className="grid grid-cols-1 gap-x-8 gap-y-5 xl:grid-cols-2">
-            <SelectLike
-              icon={UserRound}
-              label="Status"
+              label="Farm Type"
               required
-              value={form.status}
-              onChange={(value) => updateField('status', value)}
-              options={['Active', 'Pending', 'Inactive']}
-              placeholder="Active"
-              accentDot
+              value={form.farmTypeId}
+              onChange={(value) => updateField('farmTypeId', value)}
+              options={farmTypes.map(t => ({ value: String(t.id), label: t.name }))}
+              placeholder="Select Farm Type"
             />
             <SelectLike
               icon={BadgePlus}
-              label="Assign Sites (Optional)"
-              value={form.sites}
-              onChange={(value) => updateField('sites', value)}
-              options={['Green Valley Farm', 'Blue Lake Aquafarms', 'Sunrise Aqua Park']}
-              placeholder="Select sites"
+              label="Farmed Species"
+              required
+              value={form.speciesId}
+              onChange={(value) => updateField('speciesId', value)}
+              options={filteredSpecies.map(s => ({ value: String(s.id), label: s.name }))}
+              placeholder={form.farmTypeId ? "Select Species" : "Select Farm Type first"}
+              disabled={!form.farmTypeId}
             />
           </div>
         </FormPanel>
 
-        {message && <p className="mb-4 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{message}</p>}
+        {message && <p className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{message}</p>}
+        {errorMsg && <p className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{errorMsg}</p>}
 
         <button
           onClick={submitAgent}
@@ -165,8 +208,6 @@ function FormPanel({ number, title, children }: { number: string; title: string;
     </section>
   );
 }
-
-/* old form shape intentionally replaced by screenshot-matching sections */
 
 function Field({
   icon: Icon,
@@ -207,29 +248,30 @@ function SelectLike({
   onChange,
   options,
   placeholder,
-  accentDot,
+  disabled,
 }: {
   icon: LucideIcon;
   label: string;
   required?: boolean;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<{ value: string; label: string }>;
   placeholder: string;
-  accentDot?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
       <span className="text-sm text-white">{label} {required && <span className="text-red-400">*</span>}</span>
       <div className="relative mt-2">
-        {accentDot ? <span className="absolute left-4 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-emerald-500" /> : <Icon className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />}
+        <Icon className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-11 w-full appearance-none rounded-md border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-12 text-sm text-white outline-none transition focus:border-cyan-300"
+          disabled={disabled}
+          className="h-11 w-full appearance-none rounded-md border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-12 text-sm text-white outline-none transition focus:border-cyan-300 disabled:opacity-50"
         >
           <option value="">{placeholder}</option>
-          {options.map((option) => <option key={option}>{option}</option>)}
+          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-200" />
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Info,
   ChevronDown,
@@ -24,6 +24,8 @@ import {
   LineChart,
   Line,
 } from 'recharts';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 const topStats = [
   { label: 'Total Ponds', value: 24, change: '+8% vs last week', color: '#22d3ee', icon: '🌊' },
@@ -100,14 +102,168 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   );
 };
 
-export default function AnalyticsPage() {
+export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const [waterQualityPond] = useState('All Ponds');
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAnalyticsData() {
+      try {
+        const session = getAuthSession();
+        if (session) {
+          const endpoint = session.user.role === 'owner' ? '/owner/overview' : '/agent/overview';
+          const res = await apiRequest<any>(endpoint, {
+            token: session.token,
+          });
+          let dataResult = res;
+          if (session.user.role === 'owner') {
+            dataResult = {
+              ...res,
+              assigned_sites: res.sites || [],
+            };
+          }
+          setData(dataResult);
+        }
+      } catch (err) {
+        console.error('Failed to load analytics:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadAnalyticsData();
+  }, []);
+
+  const assignedSites = data?.assigned_sites || [];
+  const liveDevices = data?.devices || [];
+  const liveReadings = data?.recent_readings || [];
+  const liveAlerts = data?.alerts || [];
+  const activeAlerts = liveAlerts.filter((alert: any) => alert.status === 'open' || alert.status === 'acknowledged');
+  const onlineDevices = liveDevices.filter((device: any) => device.status === 'active' || device.status === 'online');
+  const latestReading = liveReadings[0];
+
+  const getDOValue = (temp: number) => Number((8.5 - (temp - 20) * 0.15).toFixed(1));
+  const avg = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  const waterQualityIndex = liveReadings.length
+    ? Math.round(
+        100 -
+          Math.min(
+            50,
+            avg(
+              liveReadings.map(
+                (r: any) => Math.abs((r.ph || 7.5) - 7.5) * 12 + Math.max(0, (r.turbidity || 0) - 50) * 0.15,
+              ),
+            ),
+          ),
+      )
+    : 0;
+
+  const dynamicTopStats = [
+    { label: 'Total Ponds', value: assignedSites.length, change: 'Assigned to you', color: '#22d3ee', icon: '🌊' },
+    { label: 'Avg Water Quality Index', value: waterQualityIndex, change: liveReadings.length ? 'From live readings' : 'No readings', color: '#22c55e', icon: '💧' },
+    { label: 'DO Level', value: latestReading ? getDOValue(latestReading.temperature_c).toFixed(1) : 'N/A', change: latestReading ? 'Latest reading' : 'No readings', color: '#22d3ee', icon: 'O₂' },
+    { label: 'Active Alerts', value: activeAlerts.length, change: `${liveAlerts.length} total alerts`, color: '#f59e0b', icon: '⚠' },
+    { label: 'Online Devices', value: onlineDevices.length, change: `${liveDevices.length} total devices`, color: '#22c55e', icon: '📡' },
+  ];
+
+  const dynamicWaterQualityData = liveReadings.slice(0, 12).reverse().map((reading: any) => ({
+    date: new Date(reading.collected_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    temperature: Number(reading.temperature_c),
+    ph: Number(reading.ph),
+    do: getDOValue(Number(reading.temperature_c)),
+    turbidity: Number(reading.turbidity),
+  }));
+
+  const monthlySummaryTotal = Math.max(liveDevices.length, 1);
+  const criticalCount = activeAlerts.filter((alert: any) => alert.severity === 'critical').length;
+  const warningCount = activeAlerts.filter((alert: any) => alert.severity === 'warning').length;
+  const normalCount = Math.max(onlineDevices.length - criticalCount - warningCount, 0);
+  const unmonitoredCount = Math.max(assignedSites.length - new Set(liveDevices.map((device: any) => device.site_id)).size, 0);
+  const dynamicMonthlySummary = [
+    { name: 'Critical', value: criticalCount, color: '#ef4444' },
+    { name: 'Warning', value: warningCount, color: '#f59e0b' },
+    { name: 'Normal', value: normalCount, color: '#22c55e' },
+    { name: 'Unmonitored', value: unmonitoredCount, color: '#6b7280' },
+  ];
+  const dynamicMonthlyTotal = dynamicMonthlySummary.reduce((sum, item) => sum + item.value, 0) || monthlySummaryTotal;
+
+  const dynamicParameterInsights = [
+    {
+      label: 'Temperature (°C)',
+      value: latestReading ? Number(latestReading.temperature_c).toFixed(1) : 'N/A',
+      unit: '°C',
+      status: latestReading && (latestReading.temperature_c < 20 || latestReading.temperature_c > 35) ? 'Critical' : 'Normal',
+      color: latestReading && (latestReading.temperature_c < 20 || latestReading.temperature_c > 35) ? '#ef4444' : '#22c55e',
+      sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.temperature_c)),
+    },
+    {
+      label: 'pH Level',
+      value: latestReading ? Number(latestReading.ph).toFixed(2) : 'N/A',
+      unit: '',
+      status: latestReading && (latestReading.ph < 6.5 || latestReading.ph > 8.5) ? 'High' : 'Normal',
+      color: latestReading && (latestReading.ph < 6.5 || latestReading.ph > 8.5) ? '#ef4444' : '#22c55e',
+      sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.ph)),
+    },
+    {
+      label: 'Dissolved Oxygen (mg/L)',
+      value: latestReading ? getDOValue(Number(latestReading.temperature_c)).toFixed(1) : 'N/A',
+      unit: 'mg/L',
+      status: latestReading && getDOValue(Number(latestReading.temperature_c)) < 4 ? 'Low' : 'Good',
+      color: latestReading && getDOValue(Number(latestReading.temperature_c)) < 4 ? '#f59e0b' : '#22c55e',
+      sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => getDOValue(Number(r.temperature_c))),
+    },
+    {
+      label: 'Turbidity (NTU)',
+      value: latestReading ? Number(latestReading.turbidity).toFixed(0) : 'N/A',
+      unit: 'NTU',
+      status: latestReading && latestReading.turbidity > 100 ? 'High' : 'Normal',
+      color: latestReading && latestReading.turbidity > 100 ? '#ef4444' : '#22c55e',
+      sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.turbidity)),
+    },
+  ];
+
+  const alertDays = Array.from(
+    liveAlerts.reduce((map: Map<string, any>, alert: any) => {
+      const date = new Date(alert.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const current = map.get(date) || { date, critical: 0, warning: 0, resolved: 0 };
+      if (alert.status === 'resolved' || alert.status === 'safe') {
+        current.resolved += 1;
+      } else if (alert.severity === 'critical') {
+        current.critical += 1;
+      } else {
+        current.warning += 1;
+      }
+      map.set(date, current);
+      return map;
+    }, new Map()).values()
+  ).slice(-7);
+
+  const alertCounts = liveAlerts.reduce((map: Map<string, number>, alert: any) => {
+    const key = alert.title || alert.metric || 'Water Quality Alert';
+    map.set(key, (map.get(key) || 0) + 1);
+    return map;
+  }, new Map());
+  const dynamicTopAlerts = Array.from(alertCounts.entries()).slice(0, 5).map(([label, count]) => ({
+    label,
+    count,
+    icon: label.toLowerCase().includes('temperature') ? Thermometer : label.toLowerCase().includes('oxygen') ? Wind : label.toLowerCase().includes('ph') ? Droplet : AlertTriangle,
+    color: label.toLowerCase().includes('critical') ? '#ef4444' : '#f59e0b',
+  }));
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Top Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {topStats.map((stat, i) => (
+        {dynamicTopStats.map((stat, i) => (
           <div key={i} className="glass rounded-xl p-4 card-hover animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: stat.color + '20' }}>
@@ -143,7 +299,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={waterQualityData}>
+              <AreaChart data={dynamicWaterQualityData.length > 0 ? dynamicWaterQualityData : waterQualityData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#0d3660" vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#0d3660' }} tickLine={false} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -170,25 +326,25 @@ export default function AnalyticsPage() {
             <div className="relative w-40 h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={monthlySummary} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value" stroke="none">
-                    {monthlySummary.map((entry, index) => (
+                  <Pie data={dynamicMonthlySummary} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value" stroke="none">
+                    {dynamicMonthlySummary.map((entry, index) => (
                       <Cell key={index} fill={entry.color} />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-white">72</span>
+                <span className="text-2xl font-bold text-white">{dynamicMonthlyTotal}</span>
                 <span className="text-xs text-slate-400">Total</span>
               </div>
             </div>
             <div className="space-y-2 flex-1">
-              {monthlySummary.map((item) => (
+              {dynamicMonthlySummary.map((item) => (
                 <div key={item.name} className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   <span className="text-xs text-slate-300 flex-1">{item.name}</span>
                   <span className="text-xs text-white font-medium">{item.value}</span>
-                  <span className="text-xs text-slate-400 w-10">({Math.round((item.value / 72) * 100)}%)</span>
+                  <span className="text-xs text-slate-400 w-10">({Math.round((item.value / dynamicMonthlyTotal) * 100)}%)</span>
                 </div>
               ))}
             </div>
@@ -212,8 +368,8 @@ export default function AnalyticsPage() {
             </div>
           </div>
           <div className="space-y-3">
-            {parameterInsights.map((pi, i) => {
-              const data = pi.sparkline.map((v, idx) => ({ v, idx }));
+            {dynamicParameterInsights.map((pi, i) => {
+              const data = (pi.sparkline.length > 0 ? pi.sparkline : [0]).map((v, idx) => ({ v, idx }));
               return (
                 <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[#071f35]/50 animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: pi.color + '20' }}>
@@ -266,7 +422,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={incidentTrend} barGap={2}>
+              <BarChart data={alertDays.length > 0 ? alertDays : incidentTrend} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#0d3660" vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -296,7 +452,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
           <div className="space-y-3">
-            {topAlerts.map((alert, i) => {
+            {(dynamicTopAlerts.length > 0 ? dynamicTopAlerts : topAlerts).map((alert, i) => {
               const Icon = alert.icon;
               return (
                 <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[#071f35]/50 hover:bg-[#071f35] transition-all animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
@@ -309,7 +465,10 @@ export default function AnalyticsPage() {
               );
             })}
           </div>
-          <button className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors">
+          <button
+            onClick={() => onNavigate?.('alerts')}
+            className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors"
+          >
             View All Alerts <ArrowRight className="w-4 h-4" />
           </button>
         </div>

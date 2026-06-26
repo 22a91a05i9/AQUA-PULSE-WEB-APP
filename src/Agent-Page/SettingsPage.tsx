@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Settings,
   Wrench,
@@ -19,6 +19,8 @@ import {
   Phone,
   MoreVertical,
 } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 const prefsItems = [
   { label: 'Units', desc: 'Temperature: °C , pH , DO: mg/L', icon: Wrench },
@@ -40,12 +42,7 @@ const alertContacts = [
   { name: 'Sneha Reddy', email: 'sneha.reddy@aquapulse.com', phone: '+91 65432 10987', tag: null },
 ];
 
-const notifications = [
-  { label: 'Email Notifications', desc: 'Receive alerts and updates via email', icon: Mail, enabled: true },
-  { label: 'SMS Notifications', desc: 'Receive critical alerts via SMS', icon: MessageCircle, enabled: true },
-  { label: 'System Updates', desc: 'Important system updates and announcements', icon: Info, enabled: true },
-  { label: 'Marketing Communications', desc: 'Product updates and other communications', icon: Megaphone, enabled: false },
-];
+
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
@@ -61,11 +58,79 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void 
 }
 
 export default function SettingsPage() {
-  const [notifState, setNotifState] = useState(notifications.map((n) => n.enabled));
   const [alertMode, setAlertMode] = useState<'sms' | 'email'>('sms');
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function loadSettings() {
+    try {
+      const session = getAuthSession();
+      if (session) {
+        const res = await apiRequest<any>('/settings', {
+          token: session.token,
+        });
+        setData(res);
+      }
+    } catch (err) {
+      console.error('Failed to load settings:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const handleToggle = async (key: string, currentVal: boolean) => {
+    try {
+      const session = getAuthSession();
+      if (session && data) {
+        const updatedPrefs = {
+          ...data.notification_prefs,
+          [key]: !currentVal,
+        };
+        const updated = await apiRequest<any>('/settings', {
+          method: 'PUT',
+          token: session.token,
+          body: {
+            notification_prefs: updatedPrefs,
+          },
+        });
+        setData(updated);
+      }
+    } catch (err) {
+      console.error('Failed to update settings:', err);
+    }
+  };
+
+  const session = getAuthSession();
+  const user = session?.user;
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const prefs = data?.notification_prefs || {
+    email_alerts: true,
+    sms_alerts: false,
+    push_alerts: true,
+    weekly_report: true,
+  };
+
+  const notifications = [
+    { label: 'Email Notifications', desc: 'Receive alerts and updates via email', icon: Mail, enabled: prefs.email_alerts, key: 'email_alerts' },
+    { label: 'SMS Notifications', desc: 'Receive critical alerts via SMS', icon: MessageCircle, enabled: prefs.sms_alerts, key: 'sms_alerts' },
+    { label: 'System Updates', desc: 'Important system updates and announcements', icon: Info, enabled: prefs.push_alerts, key: 'push_alerts' },
+    { label: 'Marketing Communications', desc: 'Product updates and other communications', icon: Megaphone, enabled: prefs.weekly_report, key: 'weekly_report' },
+  ];
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-fade-in">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-fade-in text-left">
       {/* Left Column */}
       <div className="space-y-5">
         {/* Profile & Account */}
@@ -76,17 +141,17 @@ export default function SettingsPage() {
           <button className="w-full flex items-center justify-between p-4 rounded-xl bg-[#071f35] hover:bg-[#0a2a47] transition-all group">
             <div className="flex items-center gap-4">
               <img
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=rahul&backgroundColor=0a2a47"
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'rahul'}&backgroundColor=0a2a47`}
                 alt="Profile"
                 className="w-14 h-14 rounded-full ring-2 ring-[#06b6d4]/30"
               />
               <div className="text-left">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-white">Rahul Verma</span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-[#06b6d4]/20 text-[#22d3ee]">Agent</span>
+                  <span className="font-semibold text-white">{user?.name || 'Rahul Verma'}</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-[#06b6d4]/20 text-[#22d3ee] capitalize">{user?.role || 'Agent'}</span>
                 </div>
-                <p className="text-sm text-slate-400 mt-0.5">rahul.verma@aquapulse.com</p>
-                <p className="text-sm text-slate-400">+91 98765 43210</p>
+                <p className="text-sm text-slate-400 mt-0.5">{user?.email || 'rahul.verma@aquapulse.com'}</p>
+                <p className="text-sm text-slate-400">{data?.profile_json?.phone || '+91 98765 43210'}</p>
               </div>
             </div>
             <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-[#22d3ee] transition-colors" />
@@ -267,12 +332,8 @@ export default function SettingsPage() {
                     <p className="text-xs text-slate-400">{notif.desc}</p>
                   </div>
                   <Toggle
-                    enabled={notifState[i]}
-                    onChange={() => {
-                      const newState = [...notifState];
-                      newState[i] = !newState[i];
-                      setNotifState(newState);
-                    }}
+                    enabled={notif.enabled}
+                    onChange={() => handleToggle(notif.key, notif.enabled)}
                   />
                 </div>
               );

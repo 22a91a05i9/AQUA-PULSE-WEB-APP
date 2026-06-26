@@ -242,7 +242,7 @@ export default function SosEmergencyPage({ onBackToDashboard }: { onBackToDashbo
         <h3 className="text-sm font-bold text-slate-450 uppercase tracking-wider mb-4">Emergency Timeline</h3>
         <div className="space-y-4 text-xs font-medium text-slate-350 relative pl-4 border-l border-slate-800 ml-2">
           {[
-            { time: '10:30:28 AM', desc: 'SOS Emergency triggered by Vikram Kumar', icon: ShieldAlert, active: true },
+            { time: '10:30:28 AM', desc: 'SOS Emergency triggered by Agent VinuthnaKumar', icon: ShieldAlert, active: true },
             { time: '10:30:28 AM', desc: 'Emergency alert sent to team and contacts', icon: Bell, active: true },
             { time: '10:30:28 AM', desc: 'Email and SMS notifications delivered', icon: Mail, active: true },
             { time: '--:--:--', desc: 'Team acknowledged / Viewing', icon: User, active: false },

@@ -93,7 +93,7 @@ function PageContent({ currentPage, onNavigate }: { currentPage: string; onNavig
     case 'dashboard':
       return <DashboardPage onNavigate={onNavigate} />;
     case 'analytics':
-      return <AnalyticsPage />;
+      return <AnalyticsPage onNavigate={onNavigate} />;
     case 'reports':
       return <ReportsPage />;
     case 'settings':
@@ -103,7 +103,7 @@ function PageContent({ currentPage, onNavigate }: { currentPage: string; onNavig
     case 'devices':
       return <DevicesPage />;
     case 'live':
-      return <LiveMonitoringPage />;
+      return <LiveMonitoringPage onNavigate={onNavigate} />;
     case 'alerts':
       return <AlertsPage />;
     case 'sos':
