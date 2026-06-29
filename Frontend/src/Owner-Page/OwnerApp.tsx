@@ -9,7 +9,7 @@ import DashboardPage from './DashboardPage';
 import DataPage from './DataPage';
 import DevicesPage from './DevicesPage';
 import LiveMonitoringPage from './LiveMonitoringPage';
-import OwnerSidebar from './OwnerSidebar';
+import OwnerSidebar, { ownerNavItems } from './OwnerSidebar';
 import ReportsPage from './ReportsPage';
 import SettingsPage from './SettingsPage';
 import SettingsAddAgentPage from './SettingsAddAgentPage';
@@ -17,6 +17,7 @@ import SitesPage from './SitesPage';
 import SosEmergencyPage from '../Agent-Page/SosEmergencyPage';
 import type { AuthSession } from '../lib/auth';
 import { useTranslation } from '../lib/i18n';
+import { Bell, CalendarDays, Fish } from 'lucide-react';
 
 const ownerPageTitles: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Dashboard', subtitle: 'Monitor your aquaculture operations and site performance.' },
@@ -41,14 +42,15 @@ export default function OwnerApp({ session, onLogout }: { session: AuthSession; 
   const { t } = useTranslation();
 
   return (
-    <div className="flex min-h-screen bg-[#020b18]">
+    <div className="app-shell flex min-h-screen bg-[#020b18] [--sidebar-width:clamp(14rem,18vw,17.5rem)]">
       <OwnerSidebar
         currentPage={currentPage}
         onNavigate={setCurrentPage}
         onLogout={onLogout}
       />
 
-      <div className="flex flex-1 flex-col pl-[280px]">
+      <div className="app-main flex flex-1 flex-col">
+        <OwnerMobileNav currentPage={currentPage} onNavigate={setCurrentPage} onLogout={onLogout} />
         <Header
           title={t(pageInfo.title)}
           subtitle={t(pageInfo.subtitle)}
@@ -57,12 +59,74 @@ export default function OwnerApp({ session, onLogout }: { session: AuthSession; 
         />
 
 
-        <main className="flex-1 overflow-auto px-8 pb-5 pt-2">
+        <main className="app-content flex-1 overflow-auto">
           <OwnerPageContent currentPage={currentPage} onNavigate={setCurrentPage} />
         </main>
 
         <StatusBar />
       </div>
+    </div>
+  );
+}
+
+function OwnerMobileNav({
+  currentPage,
+  onNavigate,
+  onLogout,
+}: {
+  currentPage: string;
+  onNavigate: (page: string) => void;
+  onLogout: () => void;
+}) {
+  const { t } = useTranslation();
+  const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <div className="mobile-workspace-nav lg:hidden">
+      <div className="mobile-nav-brand">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600">
+            <Fish className="h-6 w-6 text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold text-cyan-300">Aqua Pulse</p>
+            <p className="truncate text-xs text-slate-200">Owner Workspace</p>
+          </div>
+        </div>
+        <div className="mobile-nav-actions">
+          <button type="button" onClick={() => onNavigate('alerts')} className="mobile-date-chip relative">
+            <Bell className="h-4 w-4 text-cyan-300" />
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+              5
+            </span>
+          </button>
+          <span className="mobile-date-chip">
+            <CalendarDays className="h-4 w-4 text-cyan-300" />
+            {todayLabel}
+          </span>
+          <button type="button" onClick={onLogout} className="mobile-logout-button">
+            Logout
+          </button>
+        </div>
+      </div>
+      <nav className="mobile-nav-scroll">
+        {ownerNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = currentPage === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onNavigate(item.id)}
+              className={`mobile-nav-item ${active ? 'mobile-nav-item-active' : ''}`}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              <span>{t(item.label)}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

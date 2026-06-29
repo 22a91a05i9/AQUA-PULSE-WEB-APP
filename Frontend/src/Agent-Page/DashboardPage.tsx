@@ -223,7 +223,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
   return (
     <div className="space-y-6 animate-fade-in text-left">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="auto-card-grid gap-4">
         {statsData.map((stat, i) => {
           const Icon = stat.icon;
           const targetPage = pageMap[stat.label] || 'dashboard';
@@ -231,17 +231,17 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
             <div
               key={stat.label}
               onClick={() => onNavigate?.(targetPage)}
-              className="glass rounded-xl p-4 card-hover animate-slide-in-up cursor-pointer hover:border-cyan-500/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all duration-300"
+              className="metric-card glass rounded-xl p-4 card-hover animate-slide-in-up cursor-pointer hover:border-cyan-500/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all duration-300"
               style={{ animationDelay: `${i * 80}ms` }}
             >
-              <div className="flex items-center gap-3 mb-3">
+              <div className="metric-card-row mb-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: stat.color + '20' }}>
                   <Icon className="w-5 h-5" style={{ color: stat.color }} />
                 </div>
-                <span className="text-xs text-slate-400">{stat.label}</span>
+                <span className="metric-label text-slate-400">{stat.label}</span>
               </div>
-              <div className="text-3xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs mt-1" style={{ color: stat.subColor }}>{stat.subtext}</div>
+              <div className="metric-value font-bold text-white">{stat.value}</div>
+              <div className="metric-desc mt-1" style={{ color: stat.subColor }}>{stat.subtext}</div>
             </div>
           );
         })}
@@ -251,8 +251,8 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pond Overview */}
         <div className="lg:col-span-2 glass rounded-xl p-5 card-hover">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Pond Overview</h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 className="safe-text text-lg font-semibold text-white">Pond Overview</h3>
             <button 
               onClick={() => onNavigate?.('sites')}
               className="flex items-center gap-1 text-sm text-[#06b6d4] hover:text-[#22d3ee] transition-colors"
@@ -315,8 +315,8 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
 
         {/* Recent Alerts */}
         <div className="glass rounded-xl p-5 card-hover">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Recent Alerts</h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 className="safe-text text-lg font-semibold text-white">Recent Alerts</h3>
             <button 
               onClick={() => onNavigate?.('alerts')}
               className="text-sm text-[#06b6d4] hover:text-[#22d3ee] transition-colors"
@@ -358,7 +358,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
         {/* Devices Status */}
         <div className="glass rounded-xl p-5 card-hover cursor-pointer" onClick={() => onNavigate?.('devices')}>
           <h3 className="text-lg font-semibold text-white mb-4">Devices Status</h3>
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             <div className="relative w-36 h-36">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -383,7 +383,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
                 <span className="text-[10px] text-slate-400">Total Devices</span>
               </div>
             </div>
-            <div className="flex-1 space-y-2">
+            <div className="min-w-[12rem] flex-1 space-y-2">
               {deviceStatus.map((d) => (
                 <div key={d.label} className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
@@ -407,22 +407,22 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
 
         {/* Water Quality */}
         <div className="glass rounded-xl p-5 card-hover cursor-pointer" onClick={() => onNavigate?.('live')}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Water Quality (All Ponds)</h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 className="safe-text text-lg font-semibold text-white">Water Quality (All Ponds)</h3>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="auto-card-grid-sm gap-4">
             {waterQuality.map((wq, i) => {
               const sparklineData = wq.sparkline.map((v, idx) => ({ v, idx }));
               return (
-                <div key={i} className="p-3 rounded-lg bg-[#071f35]/50 animate-slide-in-up" style={{ animationDelay: `${i * 100}ms` }}>
+                <div key={i} className="metric-card p-3 rounded-lg bg-[#071f35]/50 animate-slide-in-up" style={{ animationDelay: `${i * 100}ms` }}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: wq.color + '20' }}>
                       <Droplet className="w-3 h-3" style={{ color: wq.color }} />
                     </div>
-                    <span className="text-xs text-slate-400">{wq.label}</span>
+                    <span className="metric-label text-slate-400">{wq.label}</span>
                   </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-bold text-white">{wq.value}</span>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-1">
+                    <span className="metric-value metric-value-sm font-bold text-white">{wq.value}</span>
                     <span className="text-xs text-slate-400">{wq.unit}</span>
                     <span className="text-xs ml-2" style={{ color: wq.color }}>{wq.status}</span>
                   </div>

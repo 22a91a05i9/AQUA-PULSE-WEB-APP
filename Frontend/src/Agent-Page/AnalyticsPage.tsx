@@ -262,17 +262,17 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Top Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="auto-card-grid gap-4">
         {dynamicTopStats.map((stat, i) => (
-          <div key={i} className="glass rounded-xl p-4 card-hover animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
-            <div className="flex items-center gap-3 mb-3">
+          <div key={i} className="metric-card glass rounded-xl p-4 card-hover animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
+            <div className="metric-card-row mb-3">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: stat.color + '20' }}>
                 <span className="text-lg">{stat.icon}</span>
               </div>
-              <span className="text-xs text-slate-400">{stat.label}</span>
+              <span className="metric-label text-slate-400">{stat.label}</span>
             </div>
-            <div className="text-2xl font-bold text-white">{stat.value}</div>
-            <div className="text-xs mt-1" style={{ color: stat.color }}>{stat.change}</div>
+            <div className="metric-value metric-value-sm font-bold text-white">{stat.value}</div>
+            <div className="metric-desc mt-1" style={{ color: stat.color }}>{stat.change}</div>
           </div>
         ))}
       </div>

@@ -138,7 +138,7 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+      <div className="auto-card-grid gap-4">
         <StatCard icon={Cpu} label="Total Devices" value={String(deviceList.length)} tone="cyan" desc="From database" />
         <StatCard icon={Wifi} label="Online" value={String(onlineCount)} tone="green" desc="Active status" />
         <StatCard icon={Zap} label="Warning" value="0" tone="amber" desc="0 warnings" />
@@ -253,7 +253,7 @@ function DeviceDetails({ device, onBack }: { device: Device; onBack: () => void 
           <ArrowLeft className="h-6 w-6" />
         </button>
         <div>
-          <h2 className="text-3xl font-extrabold text-white">
+          <h2 className="safe-text text-[clamp(1.5rem,2.4vw,2rem)] font-extrabold text-white">
             {device.id} <span className={device.status === 'Online' ? 'text-emerald-400 text-base' : 'text-red-400 text-base'}>● {device.status}</span>
           </h2>
           <p className="mt-2 text-slate-300">Devices &gt; {device.id}</p>
@@ -343,15 +343,15 @@ function StatCard({ icon: Icon, label, value, desc, tone }: { icon: typeof Cpu; 
   }[tone];
 
   return (
-    <section className="glass rounded-xl p-5">
-      <div className="flex items-center gap-4">
-        <div className={`flex h-14 w-14 items-center justify-center rounded-full ${toneClass}`}>
+    <section className="metric-card glass rounded-xl p-5">
+      <div className="metric-card-row">
+        <div className={`metric-icon flex items-center justify-center rounded-full ${toneClass}`}>
           <Icon className="h-7 w-7" />
         </div>
-        <div>
-          <p className="text-sm text-white">{label}</p>
-          <p className="mt-2 text-3xl font-extrabold text-white">{value}</p>
-          <p className="mt-1 text-xs text-emerald-400">{desc}</p>
+        <div className="metric-copy">
+          <p className="metric-label text-white">{label}</p>
+          <p className="metric-value mt-2 font-extrabold text-white">{value}</p>
+          <p className="metric-desc mt-1 text-emerald-400">{desc}</p>
         </div>
       </div>
     </section>

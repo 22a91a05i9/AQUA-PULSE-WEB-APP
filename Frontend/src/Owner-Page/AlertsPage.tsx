@@ -133,7 +133,7 @@ export default function AlertsPage() {
 
   return (
     <div className="animate-fade-in space-y-5">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+      <div className="auto-card-grid gap-4">
         <AlertSummary tone="Critical" label="Critical Alerts" value={String(criticalCount)} desc="Immediate action required" />
         <AlertSummary tone="Warning" label="Warnings" value={String(warningCount)} desc="Attention needed" />
         <AlertSummary tone="Info" label="Info Alerts" value={String(infoCount)} desc="For your information" />
@@ -141,7 +141,7 @@ export default function AlertsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <div className="relative min-w-[320px] flex-1">
+        <div className="relative min-w-[min(100%,20rem)] flex-1">
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-300" />
           <input 
             value={searchQuery}
@@ -209,15 +209,15 @@ function AlertSummary({ tone, label, value, desc }: { tone: AlertTone; label: st
   const Icon = style.icon;
 
   return (
-    <section className="glass rounded-lg p-5">
-      <div className="flex items-start gap-4">
-        <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border ${style.border} ${style.bg}`}>
+    <section className="metric-card glass rounded-lg p-5">
+      <div className="metric-card-row items-start">
+        <div className={`metric-icon flex shrink-0 items-center justify-center rounded-full border ${style.border} ${style.bg}`}>
           <Icon className={`h-7 w-7 ${style.text}`} />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-white">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-white">{value}</p>
-          <p className="mt-3 text-sm text-white">{desc}</p>
+        <div className="metric-copy">
+          <p className="metric-label font-bold text-white">{label}</p>
+          <p className="metric-value mt-2 font-bold text-white">{value}</p>
+          <p className="metric-desc mt-3 text-white">{desc}</p>
         </div>
       </div>
     </section>

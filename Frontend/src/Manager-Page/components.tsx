@@ -41,12 +41,74 @@ export function ManagerShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#020b18] text-slate-100">
+    <div className="app-shell manager-shell min-h-screen bg-[#020b18] text-slate-100">
       <ManagerSidebar currentPage={currentPage} onNavigate={onNavigate} />
-      <div className="min-h-screen pl-[320px]">
+      <div className="app-main min-h-screen">
+        <ManagerMobileNav currentPage={currentPage} onNavigate={onNavigate} onLogout={onLogout} />
         <ManagerHeader session={session} onLogout={onLogout} onNavigate={onNavigate} />
-        <main className="px-10 py-9">{children}</main>
+        <main className="app-content">{children}</main>
       </div>
+    </div>
+  );
+}
+
+function ManagerMobileNav({
+  currentPage,
+  onNavigate,
+  onLogout,
+}: {
+  currentPage: ManagerPageId;
+  onNavigate: (page: ManagerPageId) => void;
+  onLogout: () => void;
+}) {
+  const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <div className="mobile-workspace-nav lg:hidden">
+      <div className="mobile-nav-brand">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-300/10">
+            <Droplet className="h-6 w-6 text-cyan-300" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold text-cyan-300">Aqua Pulse</p>
+            <p className="truncate text-xs text-slate-200">Manager Workspace</p>
+          </div>
+        </div>
+        <div className="mobile-nav-actions">
+          <button type="button" onClick={() => onNavigate('alerts')} className="mobile-date-chip relative">
+            <Bell className="h-4 w-4 text-cyan-300" />
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+              5
+            </span>
+          </button>
+          <span className="mobile-date-chip">
+            <CalendarDays className="h-4 w-4 text-cyan-300" />
+            {todayLabel}
+          </span>
+          <button type="button" onClick={onLogout} className="mobile-logout-button">
+            Logout
+          </button>
+        </div>
+      </div>
+      <nav className="mobile-nav-scroll">
+        {managerNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = currentPage === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onNavigate(item.id as ManagerPageId)}
+              className={`mobile-nav-item ${active ? 'mobile-nav-item-active' : ''}`}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
@@ -59,8 +121,8 @@ function ManagerSidebar({
   onNavigate: (page: ManagerPageId) => void;
 }) {
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[320px] flex-col border-r border-[#0d3660] bg-[#031426]/95">
-      <div className="flex h-[112px] items-center gap-4 border-b border-[#0d3660] px-8">
+    <aside className="app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#0d3660] bg-[#031426]/95">
+      <div className="dashboard-header flex items-center gap-4 border-b border-[#0d3660]">
         <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-300/10">
           <Droplet className="h-9 w-9 text-cyan-300" />
         </div>
@@ -70,13 +132,13 @@ function ManagerSidebar({
         </div>
       </div>
 
-      <div className="px-7 py-6">
+      <div className="px-5 py-6 xl:px-7">
         <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Manager Workspace</p>
         <p className="mt-3 font-bold text-white">{managerUser.name}</p>
         <p className="mt-1 text-sm text-slate-300">{managerUser.email}</p>
       </div>
 
-      <nav className="flex-1 px-4">
+      <nav className="flex-1 px-3 xl:px-4">
         {managerNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
@@ -85,14 +147,14 @@ function ManagerSidebar({
             <button
               key={item.id}
               onClick={() => onNavigate(item.id as ManagerPageId)}
-            className={`${item.separated ? 'mt-6' : 'mt-2'} flex h-[56px] w-full items-center gap-4 rounded-lg px-4 text-left text-base font-semibold transition ${
+            className={`${item.separated ? 'mt-6' : 'mt-2'} flex min-h-12 w-full items-center gap-4 rounded-lg px-4 py-3 text-left text-[clamp(0.9rem,1vw,1rem)] font-semibold transition ${
                 isActive
                   ? 'bg-gradient-to-r from-blue-700 to-blue-600 text-white shadow-[0_12px_35px_rgba(37,99,235,0.2)]'
                   : 'text-slate-200 hover:bg-[#071f35] hover:text-cyan-200'
               }`}
             >
               <Icon className="h-5 w-5 shrink-0" />
-              <span>{item.label}</span>
+              <span className="min-w-0 truncate">{item.label}</span>
               {item.badge && (
                 <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
                   {item.badge}
@@ -211,11 +273,11 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
   const daysOfGrid = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
 
   return (
-    <header className="flex h-[112px] items-center justify-between border-b border-[#0d3660] bg-[#031426]/80 px-10 backdrop-blur z-30 relative">
+    <header className="dashboard-header hidden items-center justify-between border-b border-[#0d3660] bg-[#031426]/80 backdrop-blur z-30 relative lg:flex">
       <button className="flex h-10 w-10 items-center justify-center rounded-md text-slate-200 hover:bg-[#071f35]">
         <Menu className="h-6 w-6" />
       </button>
-      <div className="flex items-center gap-4">
+      <div className="dashboard-header-actions flex items-center gap-4">
         <div className="relative hidden lg:block">
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
           <input
@@ -231,12 +293,12 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
             className={`hidden h-12 items-center gap-3 rounded-lg border bg-[#031426] px-4 text-sm text-white transition lg:flex ${showCalendar ? 'border-cyan-400 ring-2 ring-cyan-500/20' : 'border-[#0d3660] hover:border-cyan-400'}`}
           >
             <CalendarDays className="h-4 w-4 text-cyan-400" />
-            <span>{selectedDate}</span>
+            <span className="min-w-0 truncate">{selectedDate}</span>
             <ChevronDown className={`h-4 w-4 text-slate-300 transition-transform ${showCalendar ? 'rotate-180' : ''}`} />
           </button>
 
           {showCalendar && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
+            <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-white">Select Date</span>
                 <span className="text-xs font-semibold text-cyan-400">
@@ -303,7 +365,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-96 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
+            <div className="absolute right-0 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
               <div className="mb-3 flex items-center justify-between border-b border-[#0d3660]/60 pb-2">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-sm">Notifications</span>
@@ -399,11 +461,11 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
 
 export function ControlCenter({ compact = false }: { compact?: boolean }) {
   return (
-    <section className="rounded-lg border border-[#0d3660] bg-[#041526]/80 p-7 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+    <section className="panel-surface rounded-lg border border-[#0d3660] bg-[#041526]/80 p-[clamp(1rem,2vw,1.75rem)] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
           <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-cyan-300">Manager Control Center</p>
-          <h2 className="mt-4 text-2xl font-extrabold text-white">Owners, devices, onboarding, and rollout visibility</h2>
+          <h2 className="safe-text mt-4 text-[clamp(1.35rem,2.2vw,2rem)] font-extrabold leading-tight text-white">Owners, devices, onboarding, and rollout visibility</h2>
           <p className="mt-4 max-w-5xl text-sm leading-6 text-slate-300">
             Use this workspace to onboard owners, register monitoring devices, and control the first assignment flow before field operations begin.
           </p>
@@ -422,9 +484,9 @@ export function ControlCenter({ compact = false }: { compact?: boolean }) {
 export function PageTitle({ title, subtitle, actions }: { title: string; subtitle: string; actions?: React.ReactNode }) {
   return (
     <div className="mb-6 mt-7 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-3xl font-extrabold text-white">{title}</h1>
-        <p className="mt-2 text-slate-300">{subtitle}</p>
+      <div className="min-w-0">
+        <h1 className="safe-text text-[clamp(1.5rem,2.4vw,2rem)] font-extrabold text-white">{title}</h1>
+        <p className="safe-text mt-2 text-slate-300">{subtitle}</p>
       </div>
       {actions}
     </div>
@@ -433,7 +495,7 @@ export function PageTitle({ title, subtitle, actions }: { title: string; subtitl
 
 export function Panel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-lg border border-[#0d3660] bg-[#041526]/72 p-6 shadow-[0_18px_60px_rgba(0,0,0,0.18)] ${className}`}>
+    <section className={`panel-surface rounded-lg border border-[#0d3660] bg-[#041526]/72 p-[clamp(1rem,1.6vw,1.5rem)] shadow-[0_18px_60px_rgba(0,0,0,0.18)] ${className}`}>
       {children}
     </section>
   );
@@ -453,12 +515,14 @@ export function StatCard({
   tone?: string;
 }) {
   return (
-    <Panel className="flex min-h-36 items-center gap-5">
+    <Panel className="metric-card">
+      <div className="metric-card-row">
       <ToneIcon icon={Icon} tone={tone} />
-      <div>
-        <p className="text-sm text-white">{label}</p>
-        <p className="mt-2 text-3xl font-extrabold text-white">{value}</p>
-        {desc && <p className="mt-2 text-sm text-slate-300">{desc}</p>}
+      <div className="metric-copy">
+        <p className="metric-label text-white">{label}</p>
+        <p className="metric-value mt-2 font-extrabold text-white">{value}</p>
+        {desc && <p className="metric-desc mt-2 text-slate-300">{desc}</p>}
+      </div>
       </div>
     </Panel>
   );
@@ -475,8 +539,8 @@ export function ToneIcon({ icon: Icon, tone = 'blue' }: { icon: LucideIcon; tone
   };
 
   return (
-    <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${tones[tone] || tones.blue}`}>
-      <Icon className="h-7 w-7" />
+    <div className={`metric-icon flex shrink-0 items-center justify-center rounded-full ${tones[tone] || tones.blue}`}>
+      <Icon />
     </div>
   );
 }

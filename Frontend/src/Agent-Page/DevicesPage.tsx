@@ -270,56 +270,56 @@ export default function DevicesPage() {
   return (
     <div className="space-y-6 animate-fade-in text-slate-300">
       {/* Stats Cards (Pic 4 & Pic 3) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Total Devices</div>
-            <div className="text-2xl font-bold text-white mt-1">{totalDevs}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-1">Belonging to you</div>
+      <div className="auto-card-grid gap-4">
+        <div className="metric-card glass rounded-xl p-4 flex items-center justify-between gap-3 border border-slate-800/80">
+          <div className="metric-copy">
+            <div className="metric-label text-slate-400 font-medium">Total Devices</div>
+            <div className="metric-value metric-value-sm font-bold text-white mt-1">{totalDevs}</div>
+            <div className="metric-desc text-emerald-400 font-semibold mt-1">Belonging to you</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#06b6d4]/10 border border-[#06b6d4]/30">
             <Cpu className="w-5 h-5 text-[#06b6d4]" />
           </div>
         </div>
 
-        <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Online</div>
-            <div className="text-2xl font-bold text-white mt-1">{onlineDevs}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-1">{onlinePct}%</div>
+        <div className="metric-card glass rounded-xl p-4 flex items-center justify-between gap-3 border border-slate-800/80">
+          <div className="metric-copy">
+            <div className="metric-label text-slate-400 font-medium">Online</div>
+            <div className="metric-value metric-value-sm font-bold text-white mt-1">{onlineDevs}</div>
+            <div className="metric-desc text-emerald-400 font-semibold mt-1">{onlinePct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-500/10 border border-emerald-500/30">
             <Wifi className="w-5 h-5 text-emerald-400" />
           </div>
         </div>
 
-        <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Warning</div>
-            <div className="text-2xl font-bold text-white mt-1">{warningDevs}</div>
-            <div className="text-[10px] text-amber-500 font-semibold mt-1">{warningPct}%</div>
+        <div className="metric-card glass rounded-xl p-4 flex items-center justify-between gap-3 border border-slate-800/80">
+          <div className="metric-copy">
+            <div className="metric-label text-slate-400 font-medium">Warning</div>
+            <div className="metric-value metric-value-sm font-bold text-white mt-1">{warningDevs}</div>
+            <div className="metric-desc text-amber-500 font-semibold mt-1">{warningPct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-amber-500/10 border border-amber-500/30">
             <AlertCircle className="w-5 h-5 text-amber-500" />
           </div>
         </div>
 
-        <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Offline</div>
-            <div className="text-2xl font-bold text-white mt-1">{offlineDevs}</div>
-            <div className="text-[10px] text-red-500 font-semibold mt-1">{offlinePct}%</div>
+        <div className="metric-card glass rounded-xl p-4 flex items-center justify-between gap-3 border border-slate-800/80">
+          <div className="metric-copy">
+            <div className="metric-label text-slate-400 font-medium">Offline</div>
+            <div className="metric-value metric-value-sm font-bold text-white mt-1">{offlineDevs}</div>
+            <div className="metric-desc text-red-500 font-semibold mt-1">{offlinePct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-500/10 border border-red-500/30">
             <WifiOff className="w-5 h-5 text-red-500" />
           </div>
         </div>
 
-        <div className="glass rounded-xl p-4 flex items-center justify-between border border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Maintenance</div>
-            <div className="text-2xl font-bold text-white mt-1">{maintenanceDevs}</div>
-            <div className="text-[10px] text-slate-400 font-semibold mt-1">{maintenancePct}%</div>
+        <div className="metric-card glass rounded-xl p-4 flex items-center justify-between gap-3 border border-slate-800/80">
+          <div className="metric-copy">
+            <div className="metric-label text-slate-400 font-medium">Maintenance</div>
+            <div className="metric-value metric-value-sm font-bold text-white mt-1">{maintenanceDevs}</div>
+            <div className="metric-desc text-slate-400 font-semibold mt-1">{maintenancePct}%</div>
           </div>
           <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-500/10 border border-slate-500/30">
             <Settings className="w-5 h-5 text-slate-400" />

@@ -102,12 +102,12 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
   const daysOfGrid = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
 
   return (
-    <header className="flex min-h-[98px] items-center justify-between px-8 py-5 bg-[#020b18]/85 backdrop-blur-lg z-30 relative">
-      <div>
-        <h1 className="text-2xl font-bold text-white">{t(title)}</h1>
-        {subtitle && <p className="mt-1 text-[15px] text-slate-200">{subtitle}</p>}
+    <header className="dashboard-header hidden items-center justify-between bg-[#020b18]/85 py-5 backdrop-blur-lg z-30 relative lg:flex">
+      <div className="dashboard-header-title">
+        <h1 className="safe-text text-[clamp(1.35rem,2vw,1.75rem)] font-bold leading-tight text-white">{t(title)}</h1>
+        {subtitle && <p className="safe-text mt-1 text-[clamp(0.88rem,1.1vw,0.95rem)] text-slate-200">{subtitle}</p>}
       </div>
-      <div className="flex items-center gap-5">
+      <div className="dashboard-header-actions flex items-center gap-5">
         {actions}
         
         {/* Calendar Picker Button & Popover */}
@@ -122,7 +122,7 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
           </button>
 
           {showCalendar && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in">
+            <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-white">Select Date</span>
                 <span className="text-xs font-semibold text-cyan-400">
@@ -189,7 +189,7 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-96 rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in">
+            <div className="absolute right-0 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in">
               <div className="mb-3 flex items-center justify-between border-b border-[#0d3660]/60 pb-2">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-sm">{t('Notifications')}</span>

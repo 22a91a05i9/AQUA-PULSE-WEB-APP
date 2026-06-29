@@ -282,7 +282,7 @@ export default function SitesPage() {
         </div>
 
         <div className="flex flex-wrap items-end gap-3 border-y border-[#0d3660]/50 py-4">
-          <div className="relative min-w-[320px] flex-1">
+          <div className="relative min-w-[min(100%,20rem)] flex-1">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-4 text-sm text-white outline-none focus:border-cyan-400/80 transition" placeholder="Search sites by name or location..." />
           </div>
@@ -385,7 +385,7 @@ export default function SitesPage() {
         </div>
 
         <div className="flex flex-wrap items-end gap-3 border-y border-[#0d3660]/50 py-4">
-          <div className="relative min-w-[320px] flex-1">
+          <div className="relative min-w-[min(100%,20rem)] flex-1">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-4 text-sm text-white outline-none focus:border-cyan-400/80 transition" placeholder="Search sites by name or location..." />
           </div>
@@ -752,7 +752,7 @@ function HistoryTab() {
 }
 
 function SiteStat({ icon: Icon, label, value, desc, tone }: { icon: typeof MapPin; label: string; value: string; desc: string; tone: string }) {
-  return <section className="glass rounded-lg p-4"><div className="flex items-center gap-4"><div className={`flex h-14 w-14 items-center justify-center rounded-full ${tone}`}><Icon className="h-7 w-7" /></div><div><p className="text-sm text-white">{label}</p><p className="mt-1 text-3xl font-bold text-white">{value}</p><p className="mt-2 text-xs text-emerald-400">{desc}</p></div></div></section>;
+  return <section className="metric-card glass rounded-lg p-4"><div className="metric-card-row"><div className={`metric-icon flex items-center justify-center rounded-full ${tone}`}><Icon className="h-7 w-7" /></div><div className="metric-copy"><p className="metric-label text-white">{label}</p><p className="metric-value mt-1 font-bold text-white">{value}</p><p className="metric-desc mt-2 text-emerald-400">{desc}</p></div></div></section>;
 }
 
 // Fixed mini metric layout

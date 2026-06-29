@@ -34,10 +34,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <main
-      className="flex min-h-screen w-screen items-center justify-center overflow-hidden bg-[#020814] p-2 sm:p-3"
+      className="flex min-h-dvh w-screen items-center justify-center overflow-x-hidden overflow-y-auto bg-[#020814] p-3 md:min-h-screen md:overflow-hidden"
     >
       <section
-        className="relative aspect-[16/10] w-[min(1800px,calc(100vw-6px),calc((100vh-6px)*1.6))] overflow-hidden rounded-[18px] bg-[#031124] bg-cover bg-center bg-no-repeat shadow-[0_28px_90px_rgba(0,0,0,0.58)] sm:w-[min(1800px,calc(100vw-10px),calc((100vh-10px)*1.6))]"
+        className="relative min-h-[calc(100dvh-1.5rem)] w-full max-w-[28rem] overflow-hidden rounded-[18px] bg-[#031124] bg-cover bg-center bg-no-repeat shadow-[0_28px_90px_rgba(0,0,0,0.58)] md:aspect-[16/10] md:min-h-0 md:max-w-none md:w-[min(1800px,calc(100vw-10px),calc((100vh-10px)*1.6))]"
         style={{ backgroundImage: "url('/images/aqua-login-panel-background.png')" }}
       >
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(1,8,20,0.02),rgba(1,8,20,0.01)_52%,rgba(1,8,20,0.08))]" />
@@ -45,7 +45,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         <form
           onSubmit={handleSubmit}
-          className="absolute bottom-[5.5%] right-[6%] top-[8.5%] z-[3] flex w-[44%] animate-slide-in-right flex-col rounded-[16px] border border-slate-300/30 bg-[#06162b]/66 px-[3.9%] py-[3.9%] shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-md"
+          className="absolute inset-x-4 top-1/2 z-[3] flex max-h-[calc(100dvh-4rem)] -translate-y-1/2 flex-col overflow-y-auto rounded-[16px] border border-slate-300/30 bg-[#06162b]/78 px-6 py-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-md md:bottom-[5.5%] md:right-[6%] md:left-auto md:top-[8.5%] md:max-h-none md:w-[44%] md:translate-y-0 md:animate-slide-in-right md:overflow-visible md:bg-[#06162b]/66 md:px-[3.9%] md:py-[3.9%]"
           aria-label="Aqua Pulse login form"
         >
           <div className="mb-[clamp(10px,2vw,22px)] text-center">
@@ -97,7 +97,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </button>
           </div>
 
-          <div className="mt-[clamp(10px,1.4vw,20px)] flex items-center justify-between gap-4">
+          <div className="mt-[clamp(10px,1.4vw,20px)] flex flex-wrap items-center justify-between gap-3">
             <label className="flex cursor-pointer items-center gap-2 text-[clamp(11px,0.9vw,14px)] font-medium text-white">
               <input
                 type="checkbox"
@@ -140,7 +140,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <span className="h-px flex-1 bg-slate-500/35" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
             <button
               type="button"
               onClick={() => setMessage('Google sign-in is ready to connect.')}

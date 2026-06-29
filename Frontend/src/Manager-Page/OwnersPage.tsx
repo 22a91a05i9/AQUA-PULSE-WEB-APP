@@ -129,20 +129,20 @@ export default function OwnersPage() {
   return (
     <div className="space-y-6 text-left">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-white">Owners</h1>
-          <p className="mt-2 text-slate-300">Manage and view all registered owners in the platform.</p>
+        <div className="min-w-0">
+          <h1 className="safe-text text-[clamp(1.5rem,2.4vw,2rem)] font-extrabold text-white">Owners</h1>
+          <p className="safe-text mt-2 text-slate-300">Manage and view all registered owners in the platform.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <div className="relative">
+          <div className="relative w-full max-w-md">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input className="h-12 w-80 rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none" placeholder="Search owners by name, email or phone..." />
+            <input className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none" placeholder="Search owners by name, email or phone..." />
           </div>
           <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Filter className="h-4 w-4" /> All Status</button>
           <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Upload className="h-4 w-4" /> Export</button>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+      <div className="auto-card-grid gap-5">
         <StatCard label="Total Owners" value={String(ownerStats.total)} desc="Registered owners" icon={Plus} tone="blue" />
         <StatCard label="Active Owners" value={String(ownerStats.active)} desc="Active accounts" icon={Eye} tone="green" />
         <StatCard label="Inactive Owners" value={String(ownerStats.inactive)} desc="Inactive accounts" icon={Plus} tone="orange" />

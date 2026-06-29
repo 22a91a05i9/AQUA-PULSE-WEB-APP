@@ -31,13 +31,13 @@ export default function ReportsPage() {
         title="Reports"
         subtitle="Detailed reports and insights about your aquaculture operations"
         actions={
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white"><Calendar className="h-5 w-5" /> May 11 - May 17, 2024</button>
             <button className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white"><Download className="h-5 w-5" /> Export Report</button>
           </div>
         }
       />
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+      <div className="auto-card-grid gap-5">
         {reportStats.map((stat) => (
           <StatCard key={stat.label} label={stat.label} value={stat.value} desc={stat.delta} icon={stat.icon} tone={stat.tone} />
         ))}

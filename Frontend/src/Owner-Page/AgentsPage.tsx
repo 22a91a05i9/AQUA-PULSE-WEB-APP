@@ -88,24 +88,24 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
   return (
     <div className="space-y-5 animate-fade-in text-left">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <section className="glass rounded-xl p-6">
-          <div className="flex items-center gap-5">
+        <section className="metric-card glass rounded-xl p-6">
+          <div className="metric-card-row">
             <Users className="h-9 w-9 text-cyan-300" />
-            <div>
-              <p className="text-sm text-white">Total Agents</p>
-              <p className="mt-2 text-3xl font-extrabold text-white">{agentsList.length}</p>
-              <p className="mt-1 text-sm text-emerald-400">Registered in system</p>
+            <div className="metric-copy">
+              <p className="metric-label text-white">Total Agents</p>
+              <p className="metric-value mt-2 font-extrabold text-white">{agentsList.length}</p>
+              <p className="metric-desc mt-1 text-emerald-400">Registered in system</p>
             </div>
           </div>
         </section>
-        <section className="glass rounded-xl p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-5">
+        <section className="metric-card glass rounded-xl p-6">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
+            <div className="metric-card-row flex-1">
               <Users className="h-9 w-9 text-cyan-300" />
-              <div>
-                <p className="text-sm text-white">Active Agents</p>
-                <p className="mt-2 text-3xl font-extrabold text-white">{activeCount}</p>
-                <p className="mt-1 text-sm text-emerald-400">Online now</p>
+              <div className="metric-copy">
+                <p className="metric-label text-white">Active Agents</p>
+                <p className="metric-value mt-2 font-extrabold text-white">{activeCount}</p>
+                <p className="metric-desc mt-1 text-emerald-400">Online now</p>
               </div>
             </div>
             <div className="flex gap-3">

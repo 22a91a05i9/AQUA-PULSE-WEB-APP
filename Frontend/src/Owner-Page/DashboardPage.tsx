@@ -182,7 +182,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
 
   return (
     <div className="space-y-5 animate-fade-in text-left">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+      <div className="auto-card-grid gap-4">
         {topStats.map((stat) => {
           const Icon = stat.icon;
           const targetPage = pageMap[stat.label] || 'dashboard';
@@ -190,20 +190,20 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
             <section 
               key={stat.label} 
               onClick={() => onNavigate?.(targetPage)}
-              className="glass rounded-xl p-5 cursor-pointer hover:border-cyan-500/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all duration-300"
+              className="metric-card glass rounded-xl p-5 cursor-pointer hover:border-cyan-500/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all duration-300"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex gap-4">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 flex-1 gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl" style={{ backgroundColor: `${stat.color}22` }}>
                     <Icon className="h-6 w-6" style={{ color: stat.color }} />
                   </div>
-                  <div>
-                    <p className="text-sm text-white">{stat.label}</p>
-                    <p className="mt-4 text-3xl font-extrabold text-white">{stat.value}</p>
-                    <p className="mt-1 text-xs text-emerald-400">{stat.desc}</p>
+                  <div className="metric-copy">
+                    <p className="metric-label text-white">{stat.label}</p>
+                    <p className="metric-value mt-4 font-extrabold text-white">{stat.value}</p>
+                    <p className="metric-desc mt-1 text-emerald-400">{stat.desc}</p>
                   </div>
                 </div>
-                <div className="h-14 w-28">
+                <div className="h-14 w-28 min-w-[5rem] max-w-full flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={spark}>
                       <Line type="monotone" dataKey="v" stroke={stat.color} strokeWidth={2} dot={false} />
@@ -238,8 +238,8 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
         </section>
 
         <section className="glass rounded-xl p-5 cursor-pointer hover:border-cyan-500/30 transition-all" onClick={() => onNavigate?.('sites')}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-bold text-white">Ponds Overview</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="safe-text text-base font-bold text-white">Ponds Overview</h2>
             <span className="text-2xl text-[#06b6d4] hover:text-[#22d3ee]">›</span>
           </div>
           <div className="relative h-72 overflow-hidden rounded-lg">
@@ -267,8 +267,8 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
         </section>
 
         <section className="glass rounded-xl p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-bold text-white">Recent Alerts</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="safe-text text-base font-bold text-white">Recent Alerts</h2>
             <button onClick={() => onNavigate?.('alerts')} className="text-sm font-semibold text-cyan-300 hover:text-cyan-200">View All</button>
           </div>
           <div className="space-y-4">
@@ -283,7 +283,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
                   <p className="font-semibold text-white truncate">{alert.type}</p>
                   <p className="text-sm text-slate-300">{alert.pond}</p>
                 </div>
-                <span className="text-sm text-slate-300">{alert.time}</span>
+                <span className="safe-text text-sm text-slate-300">{alert.time}</span>
                 <span className={`rounded-md px-3 py-1 text-xs font-bold ${alert.status === 'Warning' ? 'bg-amber-500/15 text-amber-300' : 'bg-red-500/15 text-red-300'}`}>
                   {alert.status}
                 </span>
@@ -296,17 +296,17 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.8fr]">
         <section className="glass rounded-xl p-5 cursor-pointer hover:border-cyan-500/30 transition-all" onClick={() => onNavigate?.('live')}>
           <h2 className="mb-4 text-base font-bold text-white">Live Feed (Real-time)</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="auto-card-grid-sm gap-4">
             {liveFeed.map((item) => {
               const Icon = item.icon;
               const dataVals = item.values.map((v) => ({ v }));
               return (
-                <div key={item.label} className="rounded-lg border border-[#0d3660] bg-[#031426]/70 p-4">
+                <div key={item.label} className="metric-card rounded-lg border border-[#0d3660] bg-[#031426]/70 p-4">
                   <div className="flex items-center gap-3">
                     <Icon className="h-8 w-8" style={{ color: item.color }} />
-                    <div>
-                      <p className="text-2xl font-bold text-white">{item.value} <span className="text-xs font-medium text-slate-300">{item.unit}</span></p>
-                      <p className="text-sm text-slate-300">{item.label}</p>
+                    <div className="metric-copy">
+                      <p className="metric-value metric-value-sm font-bold text-white">{item.value} <span className="text-xs font-medium text-slate-300">{item.unit}</span></p>
+                      <p className="metric-label text-slate-300">{item.label}</p>
                     </div>
                   </div>
                   <div className="mt-3 h-10">
@@ -324,8 +324,8 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
         </section>
 
         <section className="glass rounded-xl p-5 cursor-pointer hover:border-cyan-500/30 transition-all" onClick={() => onNavigate?.('devices')}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-bold text-white">Devices Status</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="safe-text text-base font-bold text-white">Devices Status</h2>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -393,7 +393,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
             <h2 className="text-base font-bold text-white">Feed Consumption (kg)</h2>
             <button className="rounded-lg border border-[#0d3660] px-3 py-2 text-sm text-white hover:border-cyan-300 transition">Last 7 Days</button>
           </div>
-          <p className="mb-4 text-3xl font-extrabold text-white">1,245 <span className="text-lg">kg</span> <span className="text-sm text-emerald-400">7% vs last week</span></p>
+          <p className="safe-text mb-4 text-[clamp(1.5rem,3vw,2rem)] font-extrabold text-white">1,245 <span className="text-lg">kg</span> <span className="text-sm text-emerald-400">7% vs last week</span></p>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={feedData}>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import Sidebar from './components/Sidebar';
+import Sidebar, { agentNavItems } from './components/Sidebar';
 import Header, { StatusBar } from './components/Header';
+import { Bell, CalendarDays, Fish } from 'lucide-react';
 import LoginPage from './Agent-Page/LoginPage';
 import DashboardPage from './Agent-Page/DashboardPage';
 import AnalyticsPage from './Agent-Page/AnalyticsPage';
@@ -56,10 +57,10 @@ export default function App() {
   }
 
   const pageInfo = agentPageTitles[currentPage] || { title: 'Agent Dashboard', subtitle: '' };
-  const mainWidth = sidebarCollapsed ? 'pl-16' : 'pl-80';
+  const mainWidth = sidebarCollapsed ? '[--sidebar-width:4rem]' : '[--sidebar-width:clamp(14rem,18vw,20rem)]';
 
   return (
-    <div className="flex min-h-screen bg-[#020b18]">
+    <div className={`app-shell flex min-h-screen bg-[#020b18] ${mainWidth}`}>
       <Sidebar
         currentPage={currentPage}
         onNavigate={setCurrentPage}
@@ -69,7 +70,8 @@ export default function App() {
       />
 
       {/* Main content */}
-      <div className={`flex-1 flex flex-col transition-all duration-400 ${mainWidth}`}>
+      <div className="app-main flex flex-1 flex-col transition-all duration-400">
+        <AgentMobileNav currentPage={currentPage} onNavigate={setCurrentPage} onLogout={handleLogout} />
         <Header
           title={pageInfo.title}
           subtitle={pageInfo.subtitle || undefined}
@@ -78,12 +80,73 @@ export default function App() {
         />
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto p-9">
+        <main className="app-content flex-1 overflow-auto">
           <PageContent currentPage={currentPage} onNavigate={setCurrentPage} />
         </main>
 
         <StatusBar />
       </div>
+    </div>
+  );
+}
+
+function AgentMobileNav({
+  currentPage,
+  onNavigate,
+  onLogout,
+}: {
+  currentPage: string;
+  onNavigate: (page: string) => void;
+  onLogout: () => void;
+}) {
+  const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <div className="mobile-workspace-nav lg:hidden">
+      <div className="mobile-nav-brand">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600">
+            <Fish className="h-6 w-6 text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold text-cyan-300">Aqua Pulse</p>
+            <p className="truncate text-xs text-slate-200">Agent Workspace</p>
+          </div>
+        </div>
+        <div className="mobile-nav-actions">
+          <button type="button" onClick={() => onNavigate('alerts')} className="mobile-date-chip relative">
+            <Bell className="h-4 w-4 text-cyan-300" />
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+              5
+            </span>
+          </button>
+          <span className="mobile-date-chip">
+            <CalendarDays className="h-4 w-4 text-cyan-300" />
+            {todayLabel}
+          </span>
+          <button type="button" onClick={onLogout} className="mobile-logout-button">
+            Logout
+          </button>
+        </div>
+      </div>
+      <nav className="mobile-nav-scroll">
+        {agentNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = currentPage === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onNavigate(item.id)}
+              className={`mobile-nav-item ${active ? 'mobile-nav-item-active' : ''}`}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

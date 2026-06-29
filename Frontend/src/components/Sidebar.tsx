@@ -25,7 +25,7 @@ interface SidebarProps {
   setCollapsed: (v: boolean) => void;
 }
 
-const navItems = [
+export const agentNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'sites', label: 'Sites', icon: MapPin },
   { id: 'devices', label: 'Devices', icon: Cpu },
@@ -53,9 +53,7 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen glass-dark z-40 flex flex-col transition-all duration-400 ease-in-out ${
-        isCollapsed ? 'w-16' : 'w-80'
-      }`}
+      className="app-sidebar fixed left-0 top-0 h-screen glass-dark z-40 flex flex-col transition-all duration-400 ease-in-out"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -87,14 +85,14 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item, idx) => {
+        {agentNavItems.map((item, idx) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
           return (
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-[15px] transition-all duration-300 cursor-pointer group relative ${
+              className={`w-full flex min-h-11 items-center gap-3 px-3.5 py-3 rounded-lg text-[clamp(0.85rem,0.95vw,0.95rem)] transition-all duration-300 cursor-pointer group relative ${
                 isActive
                   ? 'nav-active text-white'
                   : 'text-slate-400 hover:text-white hover:bg-[#0a2a47]/50'
@@ -140,4 +138,3 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
     </aside>
   );
 }
-

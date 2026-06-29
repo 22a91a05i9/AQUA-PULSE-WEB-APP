@@ -62,21 +62,21 @@ export default function ReportsPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="auto-card-grid gap-4">
         {stats.map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div key={i} className="glass rounded-xl p-4 card-hover animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
-              <div className="flex items-center gap-3 mb-3">
+            <div key={i} className="metric-card glass rounded-xl p-4 card-hover animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="metric-card-row mb-3">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: stat.color + '20' }}>
                   <Icon className="w-6 h-6" style={{ color: stat.color }} />
                 </div>
-                <div>
-                  <p className="text-xs text-slate-400">{stat.label}</p>
-                  <p className="text-3xl font-bold text-white">{stat.value}</p>
+                <div className="metric-copy">
+                  <p className="metric-label text-slate-400">{stat.label}</p>
+                  <p className="metric-value font-bold text-white">{stat.value}</p>
                 </div>
               </div>
-              <p className="text-xs text-[#22c55e]">{stat.change}</p>
+              <p className="metric-desc text-[#22c55e]">{stat.change}</p>
             </div>
           );
         })}

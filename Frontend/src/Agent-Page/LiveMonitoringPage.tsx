@@ -296,18 +296,18 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
       </div>
 
       {/* Parameters Overview Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="auto-card-grid gap-4">
         {parameterDetails.map((param, idx) => {
           const ParamIcon = param.icon;
           return (
-            <div key={idx} className="glass rounded-xl p-4 border border-slate-800/80 flex items-center gap-4">
+            <div key={idx} className="metric-card glass rounded-xl p-4 border border-slate-800/80 flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: param.color + '15' }}>
                 <ParamIcon className="w-5 h-5" style={{ color: param.color }} />
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">{param.label}</span>
+                <span className="metric-label text-[10px] text-slate-400 font-bold uppercase">{param.label}</span>
                 <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-bold text-white">{param.value}</span>
+                  <span className="metric-value metric-value-sm font-bold text-white">{param.value}</span>
                   <span className="text-xs text-slate-450">{param.unit}</span>
                 </div>
               </div>

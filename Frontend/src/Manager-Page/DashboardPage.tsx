@@ -73,37 +73,37 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
   return (
     <div className="space-y-7 text-left">
       <div>
-        <h1 className="text-3xl font-extrabold text-white">Welcome</h1>
+        <h1 className="safe-text text-[clamp(1.6rem,2.5vw,2rem)] font-extrabold text-white">Welcome</h1>
         <p className="mt-2 text-lg text-white">Here's what's happening with your farms today.</p>
       </div>
       <ControlCenter compact />
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+      <div className="auto-card-grid gap-5">
         {stats.map((stat) => (
           <StatCard key={stat.label} label={stat.label} value={stat.value} icon={stat.icon} tone={stat.tone} />
         ))}
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.9fr_1.4fr]">
         <Panel>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-extrabold text-white">Owner Onboarding</h2>
-            <p className="text-sm text-slate-300">Latest registered owners</p>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="safe-text text-xl font-extrabold text-white">Owner Onboarding</h2>
+            <p className="safe-text text-sm text-slate-300">Latest registered owners</p>
           </div>
           <div className="space-y-4">
             {ownersList.length === 0 ? (
               <p className="text-sm text-slate-400 py-6 text-center">No owners registered.</p>
             ) : (
               ownersList.slice(0, 2).map((owner: any, idx: number) => (
-                <div key={idx} className="flex items-center justify-between rounded-lg border border-[#0d3660] bg-[#031426]/70 p-4">
-                  <div className="flex items-center gap-4">
+                <div key={idx} className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#0d3660] bg-[#031426]/70 p-4">
+                  <div className="flex min-w-0 items-center gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-700/40 text-xl font-extrabold text-blue-300">
                       {owner.initials}
                     </div>
-                    <div>
-                      <p className="font-bold text-white">{owner.name}</p>
+                    <div className="min-w-0">
+                      <p className="safe-text font-bold text-white">{owner.name}</p>
                       <p className="mt-1 text-sm text-slate-300 truncate max-w-[150px]">{owner.email}</p>
                     </div>
                   </div>
-                  <p className="text-sm text-white">{owner.phone}</p>
+                  <p className="safe-text text-sm text-white">{owner.phone}</p>
                 </div>
               ))
             )}
@@ -116,22 +116,22 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
           </div>
         </Panel>
         <Panel>
-          <div className="mb-8 flex items-center justify-between">
-            <h2 className="text-xl font-extrabold text-white">Device Rollout Snapshot</h2>
-            <p className="text-sm text-slate-300">Assignment and activation status</p>
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="safe-text text-xl font-extrabold text-white">Device Rollout Snapshot</h2>
+            <p className="safe-text text-sm text-slate-300">Assignment and activation status</p>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4 text-left">
+          <div className="auto-card-grid-sm gap-4 text-left">
             {[
               { label: 'Active Devices', value: String(activeDevices), desc: 'In operations', tone: 'green', width: '100%' },
               { label: 'Inactive Devices', value: String(inactiveDevices), desc: 'Stored in warehouse', tone: 'orange', width: '0%' },
               { label: 'Assigned Devices', value: String(assignedDevices), desc: 'Assigned to owners', tone: 'blue', width: '100%' },
               { label: 'Unassigned Devices', value: String(unassignedDevices), desc: 'Awaiting assignment', tone: 'purple', width: '0%' },
             ].map((item) => (
-              <div key={item.label} className="rounded-lg border border-[#0d3660] bg-[#031426]/70 p-5">
+              <div key={item.label} className="metric-card rounded-lg border border-[#0d3660] bg-[#031426]/70 p-5">
                 <ToneIcon icon={item.label.includes('Assigned') ? Link2 : CheckCircle2} tone={item.tone} />
-                <p className="mt-5 text-sm text-white">{item.label}</p>
-                <p className="mt-7 text-3xl font-extrabold text-white">{item.value}</p>
-                <p className="mt-2 text-sm text-slate-300 leading-tight">{item.desc}</p>
+                <p className="metric-label mt-5 text-white">{item.label}</p>
+                <p className="metric-value mt-7 font-extrabold text-white">{item.value}</p>
+                <p className="metric-desc mt-2 text-slate-300">{item.desc}</p>
                 <div className="mt-10 h-1.5 rounded-full bg-slate-500">
                   <div className="h-full rounded-full bg-blue-500" style={{ width: item.width }} />
                 </div>

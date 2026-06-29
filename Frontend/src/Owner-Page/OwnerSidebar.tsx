@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '../lib/i18n';
 
-const ownerNavItems = [
+export const ownerNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'sites', label: 'Sites', icon: MapPin },
   { id: 'agents', label: 'Agents', icon: UserRound },
@@ -43,7 +43,7 @@ export default function OwnerSidebar({
   const { t } = useTranslation();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-col border-r border-[#0d3660] bg-[#031426]/95">
+    <aside className="app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#0d3660] bg-[#031426]/95">
       <div className="flex h-[92px] items-center gap-3 px-5 border-b border-[#0d3660]">
         <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
           style={{ background: 'linear-gradient(135deg, #06b6d4, #0ea5e9)' }}
@@ -65,14 +65,14 @@ export default function OwnerSidebar({
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`flex h-[50px] w-full items-center gap-4 rounded-lg px-4 text-left text-base font-medium transition cursor-pointer ${
+              className={`flex min-h-12 w-full items-center gap-4 rounded-lg px-4 py-3 text-left text-[clamp(0.9rem,1vw,1rem)] font-medium transition cursor-pointer ${
                 active
                   ? 'bg-gradient-to-r from-cyan-500/25 to-blue-700/60 text-white'
                   : 'text-slate-200 hover:bg-[#071f35] hover:text-cyan-200'
               }`}
             >
               <Icon className={`h-5 w-5 shrink-0 ${active ? 'text-cyan-300' : 'text-slate-200'}`} />
-              <span>{t(item.label)}</span>
+              <span className="min-w-0 truncate">{t(item.label)}</span>
               {item.badge && (
                 <span
                   className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${
@@ -111,4 +111,3 @@ export default function OwnerSidebar({
     </aside>
   );
 }
-

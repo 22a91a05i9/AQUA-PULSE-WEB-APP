@@ -25,33 +25,35 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate: (page: strin
         subtitle="Insights and analytics overview"
         actions={<button className="h-12 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white">Last 7 Days</button>}
       />
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+      <div className="auto-card-grid gap-5">
         {analyticsStats.map((stat) => (
-          <Panel key={stat.label} className="flex items-center gap-5">
+          <Panel key={stat.label} className="metric-card">
+            <div className="metric-card-row">
             <ToneIcon icon={stat.icon} tone={stat.tone} />
-            <div>
-              <p className="font-bold text-cyan-300">{stat.label}</p>
-              <p className="mt-4 text-4xl font-extrabold text-white">{stat.value}</p>
-              <p className={`mt-3 text-sm ${stat.positive === false ? 'text-orange-400' : 'text-emerald-300'}`}>{stat.delta}</p>
+            <div className="metric-copy">
+              <p className="metric-label font-bold text-cyan-300">{stat.label}</p>
+              <p className="metric-value mt-4 font-extrabold text-white">{stat.value}</p>
+              <p className={`metric-desc mt-3 ${stat.positive === false ? 'text-orange-400' : 'text-emerald-300'}`}>{stat.delta}</p>
+            </div>
             </div>
           </Panel>
         ))}
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1.1fr]">
         <Panel>
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-4">
                 <ToneIcon icon={Droplet} tone="blue" />
                 <div>
-                  <h2 className="text-xl font-extrabold text-cyan-300">Water Quality Overview</h2>
+                  <h2 className="safe-text text-xl font-extrabold text-cyan-300">Water Quality Overview</h2>
                   <p className="mt-3 text-sm text-slate-300">Average water quality index</p>
                 </div>
               </div>
-              <p className="mt-6 text-4xl font-extrabold text-blue-400">Good</p>
+              <p className="safe-text mt-6 text-[clamp(1.75rem,3vw,2.5rem)] font-extrabold text-blue-400">Good</p>
               <p className="mt-4 text-sm text-emerald-300">5% vs last 7 days</p>
             </div>
-            <div className="h-32 w-72">
+            <div className="h-32 min-w-[12rem] flex-1">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={readingsTrend}>
                   <Line type="monotone" dataKey="quality" stroke="#1685ff" strokeWidth={3} dot={{ r: 4 }} />
@@ -63,9 +65,9 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate: (page: strin
         <Panel>
           <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[1fr_260px_220px]">
             <div>
-              <h2 className="text-xl font-extrabold text-cyan-300">Device Health Summary</h2>
+              <h2 className="safe-text text-xl font-extrabold text-cyan-300">Device Health Summary</h2>
               <p className="mt-3 text-sm text-slate-300">Total devices monitored</p>
-              <p className="mt-7 text-4xl font-extrabold text-white">24</p>
+              <p className="safe-text mt-7 text-[clamp(1.75rem,3vw,2.5rem)] font-extrabold text-white">24</p>
               <p className="mt-4 text-sm text-emerald-300">4 vs last 7 days</p>
             </div>
             <div className="relative h-44">
@@ -93,11 +95,11 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate: (page: strin
         <Panel>
           <h2 className="text-xl font-extrabold text-cyan-300">Recent Alerts Summary</h2>
           <p className="mt-3 text-sm text-slate-300">Compared to previous 7 days</p>
-          <div className="mt-8 grid grid-cols-3 divide-x divide-[#0d3660] text-center">
+          <div className="auto-card-grid-sm mt-8 gap-0 divide-x divide-[#0d3660] text-center">
             {['Total Alerts', 'Warning Alerts', 'Critical Alerts'].map((label, index) => (
-              <div key={label}>
-                <p className="text-sm text-slate-300">{label}</p>
-                <p className="mt-4 text-3xl font-extrabold text-white">{index === 2 ? '0' : '8'} <span className="text-base text-orange-400">{index === 2 ? '-' : '2'}</span></p>
+              <div key={label} className="metric-card px-2">
+                <p className="metric-label text-slate-300">{label}</p>
+                <p className="metric-value metric-value-sm mt-4 font-extrabold text-white">{index === 2 ? '0' : '8'} <span className="text-base text-orange-400">{index === 2 ? '-' : '2'}</span></p>
               </div>
             ))}
           </div>
