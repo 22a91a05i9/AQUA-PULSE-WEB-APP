@@ -32,6 +32,7 @@ import {
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { hasApiBaseUrl } from '../lib/config';
+import { RowActionMenu } from '../lib/tableActions';
 
 interface Device {
   id: string;
@@ -109,6 +110,11 @@ export default function DevicesPage() {
   const [loading, setLoading] = useState(true);
   const [deviceReadings, setDeviceReadings] = useState<SensorReading[]>([]);
   const [readingsLoading, setReadingsLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     async function loadData() {
@@ -225,8 +231,12 @@ export default function DevicesPage() {
       dev.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       dev.pondName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || dev.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesType = typeFilter === 'all' || dev.type.toLowerCase().includes(typeFilter.toLowerCase()) || (typeFilter === 'wqs' && dev.type.toLowerCase().includes('water quality')) || (typeFilter === 'sf' && dev.type.toLowerCase().includes('feeder')) || (typeFilter === 'ae' && dev.type.toLowerCase().includes('aerator'));
+    return matchesSearch && matchesStatus && matchesType;
   });
+
+  const totalPages = Math.ceil(filteredDevices.length / itemsPerPage) || 1;
+  const paginatedDevices = filteredDevices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const totalDevs = devicesList.length;
   const onlineDevs = devicesList.filter(d => d.status === 'online').length;
@@ -711,165 +721,272 @@ export default function DevicesPage() {
             </div>
 
             <div className="flex w-full sm:w-auto items-center gap-3 justify-end">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4]"
-              >
-                <option value="all">All Status</option>
-                <option value="online">Online</option>
-                <option value="warning">Warning</option>
-                <option value="offline">Offline</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
+              {showAdvancedFilters && (
+                <>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4] animate-fade-in"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="online">Online</option>
+                    <option value="warning">Warning</option>
+                    <option value="offline">Offline</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
 
-              <select
-                className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4]"
-              >
-                <option value="all">All Types</option>
-                <option value="wqs">Water Quality Sensor</option>
-                <option value="sf">Smart Feeder</option>
-                <option value="ae">Aerator</option>
-              </select>
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => {
+                      setTypeFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4] animate-fade-in"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="wqs">Water Quality Sensor</option>
+                    <option value="sf">Smart Feeder</option>
+                    <option value="ae">Aerator</option>
+                  </select>
+                </>
+              )}
 
-              <button className="h-10 px-3 flex items-center gap-2 rounded-lg border border-slate-700/50 bg-[#041526]/50 text-sm text-slate-300 hover:text-white transition">
+              <button 
+                onClick={() => setShowAdvancedFilters(prev => !prev)}
+                className={`h-10 px-3 flex items-center gap-2 rounded-lg border text-sm transition ${
+                  showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-slate-700/50 bg-[#041526]/50 text-slate-300 hover:text-white'
+                }`}
+              >
                 <SlidersHorizontal className="w-4 h-4" />
-                <span>More Filters</span>
+                <span>Filters</span>
               </button>
 
               <div className="flex border border-slate-700/50 rounded-lg overflow-hidden bg-[#041526]/50">
-                <button className="p-2.5 text-slate-400 hover:text-white bg-[#06b6d4]/10 text-[#22d3ee]">
+                <button 
+                  onClick={() => setViewMode('list')}
+                  className={`p-2.5 transition ${viewMode === 'list' ? 'bg-[#06b6d4]/10 text-[#22d3ee]' : 'text-slate-400 hover:text-white'}`}
+                >
                   <List className="w-4 h-4" />
                 </button>
-                <button className="p-2.5 text-slate-400 hover:text-white">
+                <button 
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2.5 transition ${viewMode === 'grid' ? 'bg-[#06b6d4]/10 text-[#22d3ee]' : 'text-slate-400 hover:text-white'}`}
+                >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
               </div>
             </div>
           </div>
-
-          <div className="glass rounded-xl overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#041526]/30">
-                    <th className="py-4 px-6">Device Name</th>
-                    <th className="py-4 px-6">Device ID</th>
-                    <th className="py-4 px-6">Type</th>
-                    <th className="py-4 px-6">Pond/Group</th>
-                    <th className="py-4 px-6">Status</th>
-                    <th className="py-4 px-6">Last Seen</th>
-                    <th className="py-4 px-6">Battery</th>
-                    <th className="py-4 px-6 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
-                  {filteredDevices.length > 0 ? (
-                    filteredDevices.map((dev) => (
-                      <tr
-                        key={dev.id}
-                        className="table-row-hover hover:bg-[#071f35]/30 cursor-pointer transition"
-                        onClick={() => {
-                          setSelectedDevice(dev);
-                          setActiveTab('overview');
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedDevices.length > 0 ? (
+                paginatedDevices.map((dev) => (
+                  <div
+                    key={dev.id}
+                    onClick={() => {
+                      setSelectedDevice(dev);
+                      setActiveTab('overview');
+                    }}
+                    className="glass rounded-xl p-5 border border-[#0d3660]/60 hover:border-[#06b6d4] transition cursor-pointer space-y-4 text-left"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#071f35] border border-slate-800 text-[#06b6d4]">
+                          <Droplet className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-white text-sm">{dev.name}</h3>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">{dev.id}</p>
+                        </div>
+                      </div>
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
+                        style={{
+                          backgroundColor: statusColors[dev.status] + '20',
+                          color: statusColors[dev.status],
+                          border: `1px solid ${statusColors[dev.status]}30`,
                         }}
                       >
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full inline-block"
-                              style={{ backgroundColor: statusColors[dev.status] }}
-                            />
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#071f35] border border-slate-800 shrink-0">
-                              <Droplet className="w-4 h-4 text-[#06b6d4]" />
+                        <span className="w-1 h-1 rounded-full mr-1" style={{ backgroundColor: statusColors[dev.status] }} />
+                        {dev.status}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2 border-t border-slate-800/80 pt-3 text-xs">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Device Type</span>
+                        <span className="text-slate-200 font-medium">{dev.type}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Group/Pond</span>
+                        <span className="text-slate-200 font-medium">{dev.pondName}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Last Seen</span>
+                        <span className="text-slate-200 font-medium">{dev.lastSeen}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <Battery className={`w-4 h-4 ${getBatteryColorClass(dev.battery, dev.status)}`} />
+                        <span>{dev.battery !== null ? `${dev.battery}%` : '—'}</span>
+                      </div>
+                      <button className="text-xs font-semibold text-[#06b6d4] hover:text-[#22d3ee] transition flex items-center gap-1">
+                        View details <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-8 text-center text-slate-500 glass rounded-xl">
+                  No devices assigned to this agent.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="glass rounded-xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#041526]/30">
+                      <th className="py-4 px-6">Device Name</th>
+                      <th className="py-4 px-6">Device ID</th>
+                      <th className="py-4 px-6">Type</th>
+                      <th className="py-4 px-6">Pond/Group</th>
+                      <th className="py-4 px-6">Status</th>
+                      <th className="py-4 px-6">Last Seen</th>
+                      <th className="py-4 px-6">Battery</th>
+                      <th className="py-4 px-6 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
+                    {paginatedDevices.length > 0 ? (
+                      paginatedDevices.map((dev) => (
+                        <tr
+                          key={dev.id}
+                          className="table-row-hover hover:bg-[#071f35]/30 cursor-pointer transition"
+                          onClick={() => {
+                            setSelectedDevice(dev);
+                            setActiveTab('overview');
+                          }}
+                        >
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full inline-block"
+                                style={{ backgroundColor: statusColors[dev.status] }}
+                              />
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#071f35] border border-slate-800 shrink-0">
+                                <Droplet className="w-4 h-4 text-[#06b6d4]" />
+                              </div>
+                              <span className="font-semibold text-white">{dev.name}</span>
                             </div>
-                            <span className="font-semibold text-white">{dev.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6 font-mono text-xs text-slate-400">{dev.id}</td>
-                        <td className="py-4 px-6 text-slate-400">{dev.type}</td>
-                        <td className="py-4 px-6 font-medium text-white">{dev.pondName}</td>
-                        <td className="py-4 px-6">
-                          <span
-                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
-                            style={{
-                              backgroundColor: statusColors[dev.status] + '20',
-                              color: statusColors[dev.status],
-                              border: `1px solid ${statusColors[dev.status]}30`,
-                            }}
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full mr-1.5 animate-pulse" style={{ backgroundColor: statusColors[dev.status] }} />
-                            {dev.status}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-slate-400">{dev.lastSeen}</td>
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-1.5">
-                            {dev.battery !== null ? (
-                              <>
-                                <Battery className={`w-4 h-4 ${getBatteryColorClass(dev.battery, dev.status)}`} />
-                                <span className="font-semibold text-white">{dev.battery}%</span>
-                              </>
-                            ) : (
-                              <span className="text-slate-500">—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedDevice(dev);
-                                setActiveTab('overview');
+                          </td>
+                          <td className="py-4 px-6 font-mono text-xs text-slate-400">{dev.id}</td>
+                          <td className="py-4 px-6 text-slate-400">{dev.type}</td>
+                          <td className="py-4 px-6 font-medium text-white">{dev.pondName}</td>
+                          <td className="py-4 px-6">
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
+                              style={{
+                                backgroundColor: statusColors[dev.status] + '20',
+                                color: statusColors[dev.status],
+                                border: `1px solid ${statusColors[dev.status]}30`,
                               }}
-                              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                              title="View Device Details"
                             >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                          </div>
+                              <span className="w-1.5 h-1.5 rounded-full mr-1.5 animate-pulse" style={{ backgroundColor: statusColors[dev.status] }} />
+                              {dev.status}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-slate-400">{dev.lastSeen}</td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-1.5">
+                              {dev.battery !== null ? (
+                                <>
+                                  <Battery className={`w-4 h-4 ${getBatteryColorClass(dev.battery, dev.status)}`} />
+                                  <span className="font-semibold text-white">{dev.battery}%</span>
+                                </>
+                              ) : (
+                                <span className="text-slate-500">—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedDevice(dev);
+                                  setActiveTab('overview');
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                                title="View Device Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <RowActionMenu 
+                                onEdit={() => alert('Access Denied: Only Owners and Managers can edit devices.')}
+                                onDelete={() => alert('Access Denied: Only Owners and Managers can delete devices.')}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-500">
+                          No devices assigned to this agent.
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-500">
-                        No devices assigned to this agent.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
-              <div className="text-xs text-slate-400">
-                Showing {filteredDevices.length === 0 ? 0 : 1} to {filteredDevices.length} of {devicesList.length} devices
-              </div>
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">Rows per page</span>
-                  <select className="bg-transparent border-none text-xs text-white focus:outline-none">
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                  </select>
+              {/* Pagination */}
+              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
+                <div className="text-xs text-slate-400">
+                  Showing {filteredDevices.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredDevices.length)} of {filteredDevices.length} devices
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50" disabled>
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button className="w-7 h-7 rounded-lg text-xs font-medium bg-[#06b6d4] text-white">1</button>
-                  <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50" disabled>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Rows per page</span>
+                    <span className="text-xs text-white bg-transparent px-1">{itemsPerPage}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-7 h-7 rounded-lg text-xs font-medium transition ${
+                          currentPage === page ? 'bg-[#06b6d4] text-white' : 'text-slate-450 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

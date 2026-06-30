@@ -120,12 +120,15 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
 
       {/* Bottom */}
       <div className="px-2 pb-4 space-y-1">
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-[#0a2a47]/50 transition-all">
+        <button 
+          onClick={() => alert('Support Number: 6303403957')}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-[#0a2a47]/50 transition-all"
+        >
           <HelpCircle className="w-5 h-5 shrink-0" />
           {!isCollapsed && <span className="animate-slide-in-left">{t('Need Help?')}</span>}
         </button>
         {!isCollapsed && (
-          <p className="text-[10px] text-slate-500 px-3 animate-slide-in-left">{t('Contact Support')}</p>
+          <p className="text-[10px] text-slate-500 px-3 animate-slide-in-left">6303403957</p>
         )}
         <button
           onClick={onLogout}

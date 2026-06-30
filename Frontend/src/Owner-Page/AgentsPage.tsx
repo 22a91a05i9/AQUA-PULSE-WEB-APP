@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Clock, Filter, MoreHorizontal, Plus, Search, UserRound, Users } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { RowActionMenu } from '../lib/tableActions';
 
 interface Agent {
   id: string;
@@ -35,6 +36,49 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All Status');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const handleDeleteAgent = async (agent: Agent) => {
+    if (!window.confirm(`Are you sure you want to delete agent "${agent.name}"?`)) {
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      await apiRequest(`/owner/agents/${agent.id}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      setAgentsList((prev) => prev.filter((a) => a.id !== agent.id));
+      alert(`Agent "${agent.name}" deleted successfully.`);
+    } catch (err: any) {
+      console.error('Failed to delete agent:', err);
+      alert(err?.detail || err?.message || 'Failed to delete agent.');
+    }
+  };
+
+  const handleEditAgent = async (agent: Agent) => {
+    const newName = window.prompt(`Edit name for agent:`, agent.name);
+    if (newName === null) return;
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>(`/owner/agents/${agent.id}`, {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          full_name: newName.trim(),
+        },
+      });
+      setAgentsList((prev) =>
+        prev.map((a) => (a.id === agent.id ? { ...a, name: updated.full_name } : a))
+      );
+      alert(`Agent profile updated successfully.`);
+    } catch (err: any) {
+      console.error('Failed to update agent:', err);
+      alert(err?.detail || err?.message || 'Failed to update agent.');
+    }
+  };
 
   useEffect(() => {
     async function fetchAgents() {
@@ -45,7 +89,7 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
             token: session.token,
           });
           const mappedAgents: Agent[] = res.map((a: any) => ({
-            id: `AG-${a.id}`,
+            id: String(a.id),
             name: a.full_name || 'Unnamed Agent',
             site: a.farm_type_id ? `Site Type #${a.farm_type_id}` : 'General',
             area: 'Area 1',
@@ -109,17 +153,24 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
               </div>
             </div>
             <div className="flex gap-3">
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value)}
-                className="h-11 rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-4 text-sm text-white outline-none"
+              {showAdvancedFilters && (
+                <select
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                  className="h-11 rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-4 text-sm text-white outline-none animate-fade-in"
+                >
+                  <option>All Status</option>
+                  <option>Online</option>
+                  <option>Warning</option>
+                  <option>Offline</option>
+                </select>
+              )}
+              <button 
+                onClick={() => setShowAdvancedFilters(prev => !prev)}
+                className={`flex h-11 items-center gap-2 rounded-lg border px-4 text-sm font-semibold transition ${
+                  showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
+                }`}
               >
-                <option>All Status</option>
-                <option>Online</option>
-                <option>Warning</option>
-                <option>Offline</option>
-              </select>
-              <button className="flex h-11 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white">
                 <Filter className="h-4 w-4" />
                 Filter
               </button>
@@ -164,10 +215,8 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
               <span className="text-lg font-extrabold text-white">{agent.score}%</span>
               <span className="text-[10px] text-slate-300">Score</span>
             </div>
-            <p className="text-sm text-slate-300">ID: {agent.id}</p>
-            <button className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-300 hover:bg-[#071f35]">
-              <MoreHorizontal className="h-5 w-5" />
-            </button>
+            <p className="text-sm text-slate-300">ID: AG-{agent.id}</p>
+            <RowActionMenu onEdit={() => handleEditAgent(agent)} onDelete={() => handleDeleteAgent(agent)} />
           </section>
         ))}
       </div>

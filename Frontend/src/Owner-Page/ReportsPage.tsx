@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import {
   BarChart3,
   Bell,
@@ -8,10 +9,10 @@ import {
   FileText,
   Filter,
   LineChart,
-  MoreHorizontal,
   Search,
   SendHorizontal,
 } from 'lucide-react';
+import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
 
 const popularReports = [
   {
@@ -58,6 +59,46 @@ const generatedReports = [
 ];
 
 export default function ReportsPage() {
+  const [search, setSearch] = useState('');
+  const [reports, setReports] = useState(generatedReports);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  const filteredReports = useMemo(
+    () => reports.filter((report) => {
+      const matchesSearch = rowMatchesSearch(report, search);
+      const matchesType = typeFilter === 'all' || report[1].toLowerCase().includes(typeFilter.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || report[6].toLowerCase() === statusFilter.toLowerCase();
+      return matchesSearch && matchesType && matchesStatus;
+    }),
+    [reports, search, typeFilter, statusFilter],
+  );
+
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
+  const paginatedReports = filteredReports.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const exportReports = () => {
+    exportRowsToCsv(
+      'aqua-pulse-owner-reports.csv',
+      filteredReports.map(([name, type, scope, by, generated, format, status]) => ({
+        Name: name,
+        Type: type,
+        Scope: scope,
+        GeneratedBy: by,
+        GeneratedOn: generated,
+        Format: format,
+        Status: status,
+      })),
+    );
+  };
+
+  const deleteReport = (name: string) => {
+    setReports((current) => current.filter((report) => report[0] !== name));
+  };
+
   return (
     <div className="animate-fade-in space-y-3">
       <section className="glass rounded-lg p-5">
@@ -97,12 +138,40 @@ export default function ReportsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-80 max-w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className="h-10 w-full rounded-md border border-[#0d3660] bg-[#020b18]/60 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-400" placeholder="Search reports..." />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-md border border-[#0d3660] bg-[#020b18]/60 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-400" placeholder="Search reports..." />
             </div>
-            <button className="flex h-10 items-center gap-2 rounded-md border border-[#0d3660] px-5 text-sm font-semibold text-white">
+            {showAdvancedFilters && (
+              <>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="h-10 rounded-md border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none"
+                >
+                  <option value="all">All Types</option>
+                  <option value="summary">Summary Reports</option>
+                  <option value="quality">Quality Reports</option>
+                  <option value="device">Device Reports</option>
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-10 rounded-md border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none"
+                >
+                  <option value="all">All Status</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </>
+            )}
+            <button 
+              onClick={() => setShowAdvancedFilters(prev => !prev)}
+              className={`flex h-10 items-center gap-2 rounded-md border px-5 text-sm font-semibold transition ${
+                showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
+              }`}
+            >
               <Filter className="h-4 w-4" /> Filters
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-md border border-[#0d3660] px-5 text-sm font-semibold text-white">
+            <button onClick={exportReports} className="flex h-10 items-center gap-2 rounded-md border border-[#0d3660] px-5 text-sm font-semibold text-white">
               <Download className="h-4 w-4" /> Export
             </button>
           </div>
@@ -123,7 +192,7 @@ export default function ReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#0d3660]/50">
-              {generatedReports.map(([name, type, scope, by, generated, format, status]) => (
+              {paginatedReports.map(([name, type, scope, by, generated, format, status]) => (
                 <tr key={name} className="transition hover:bg-[#071f35]/40">
                   <td className="px-5 py-4 text-slate-200">{name}</td>
                   <td className="text-slate-300">{type}</td>
@@ -140,8 +209,10 @@ export default function ReportsPage() {
                   </td>
                   <td className="pr-5">
                     <div className="flex justify-end gap-3 text-slate-200">
-                      <Download className="h-4 w-4" />
-                      <MoreHorizontal className="h-4 w-4" />
+                      <button onClick={() => exportRowsToCsv(`${name}.csv`, [{ name, type, scope, by, generated, format, status }])} className="text-slate-200 hover:text-white">
+                        <Download className="h-4 w-4" />
+                      </button>
+                      <RowActionMenu onEdit={() => alert(`Editing ${name}`)} onDelete={() => deleteReport(name)} />
                     </div>
                   </td>
                 </tr>
@@ -151,14 +222,35 @@ export default function ReportsPage() {
         </div>
 
         <div className="flex items-center justify-between border-t border-[#0d3660]/50 px-5 py-3 text-sm text-slate-400">
-          <span>Showing 1 to 8 of 24 reports</span>
+          <span>
+            Showing {filteredReports.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredReports.length)} of {filteredReports.length} reports
+          </span>
           <div className="flex items-center gap-2">
-            <button className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660]"><ChevronLeft className="h-4 w-4" /></button>
-            <button className="h-8 w-8 rounded-md bg-blue-600 text-white">1</button>
-            <button className="h-8 w-8 rounded-md border border-[#0d3660] text-white">2</button>
-            <button className="h-8 w-8 rounded-md border border-[#0d3660] text-white">3</button>
-            <button className="h-8 w-8 rounded-md border border-[#0d3660] text-white">...</button>
-            <button className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660]"><ChevronRight className="h-4 w-4" /></button>
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660] disabled:opacity-55"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`h-8 w-8 rounded-md border transition ${
+                  currentPage === page ? 'bg-blue-600 border-blue-600 text-white' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660] disabled:opacity-55"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </section>

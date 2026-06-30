@@ -8,7 +8,7 @@ import DevicesPage from './DevicesPage';
 import OwnersPage from './OwnersPage';
 import ReportsPage from './ReportsPage';
 import SettingsPage from './SettingsPage';
-import AlertsPage from '../Agent-Page/AlertsPage';
+import AlertsPage from './AlertsPage';
 import SosEmergencyPage from '../Agent-Page/SosEmergencyPage';
 
 export default function ManagerApp({ session, onLogout }: { session: AuthSession; onLogout: () => void }) {

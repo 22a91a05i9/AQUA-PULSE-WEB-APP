@@ -18,7 +18,7 @@ import {
   Thermometer,
   AlertTriangle,
 } from 'lucide-react';
-
+import { exportRowsToCsv, RowActionMenu } from '../lib/tableActions';
 const stats = [
   { label: 'Reports Generated', value: 43, change: '++12% vs last 7 days', color: '#22d3ee', icon: FileText },
   { label: 'Reports Downloaded', value: 36, change: '++8% vs last 7 days', color: '#22c55e', icon: Download },
@@ -58,6 +58,11 @@ const scheduledReports = [
 export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
+  const itemsPerPage = 10;
+
+  const filteredReports = reports.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()));
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
+  const paginatedReports = filteredReports.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -135,51 +140,59 @@ export default function ReportsPage() {
 
           {/* Table rows */}
           <div>
-            {reports
-              .filter((r) => r.name.toLowerCase().includes(search.toLowerCase()))
-              .map((report, i) => {
-                const Icon = report.icon;
-                return (
-                  <div
-                    key={i}
-                    className="grid grid-cols-6 gap-2 px-5 py-3 items-center border-b border-[#0d3660]/30 table-row-hover animate-slide-in-up"
-                    style={{ animationDelay: `${i * 50}ms` }}
-                  >
-                    <div className="col-span-2 flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: report.color + '20' }}>
-                        <Icon className="w-3.5 h-3.5" style={{ color: report.color }} />
-                      </div>
-                      <span className="text-sm text-white truncate">{report.name}</span>
+            {paginatedReports.map((report, i) => {
+              const Icon = report.icon;
+              return (
+                <div
+                  key={i}
+                  className="grid grid-cols-6 gap-2 px-5 py-3 items-center border-b border-[#0d3660]/30 table-row-hover animate-slide-in-up"
+                  style={{ animationDelay: `${i * 50}ms` }}
+                >
+                  <div className="col-span-2 flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: report.color + '20' }}>
+                      <Icon className="w-3.5 h-3.5" style={{ color: report.color }} />
                     </div>
-                    <span className="text-xs text-slate-400 truncate">{report.type}</span>
-                    <span className="text-xs text-slate-400 truncate">{report.generated.split(',')[0]}</span>
-                    <span className="text-xs text-slate-300 truncate">{report.by}</span>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className={`text-xs font-medium ${report.status === 'Completed' ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                        {report.status}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-[#22d3ee] transition-colors">
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                        <button className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-white transition-colors">
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                    <span className="text-sm text-white truncate">{report.name}</span>
+                  </div>
+                  <span className="text-xs text-slate-400 truncate">{report.type}</span>
+                  <span className="text-xs text-slate-400 truncate">{report.generated.split(',')[0]}</span>
+                  <span className="text-xs text-slate-300 truncate">{report.by}</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className={`text-xs font-medium ${report.status === 'Completed' ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                      {report.status}
+                    </span>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        onClick={() => exportRowsToCsv(`${report.name}.csv`, [report])}
+                        className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-[#22d3ee] transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                      <RowActionMenu 
+                        onEdit={() => alert(`Access Denied: Only Owners and Managers can edit reports.`)}
+                        onDelete={() => alert(`Access Denied: Only Owners and Managers can delete reports.`)}
+                      />
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
           </div>
 
           {/* Pagination */}
           <div className="flex items-center justify-between px-5 py-3 border-t border-[#0d3660]">
-            <span className="text-xs text-slate-400">Showing 1 to 10 of 43 reports</span>
+            <span className="text-xs text-slate-400">
+              Showing {filteredReports.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredReports.length)} of {filteredReports.length} reports
+            </span>
             <div className="flex items-center gap-1">
-              <button className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#071f35] transition-all">
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#071f35] transition-all disabled:opacity-50"
+              >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              {[1, 2, 3, 4, 5].map((page) => (
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
@@ -188,10 +201,14 @@ export default function ReportsPage() {
                   {page}
                 </button>
               ))}
-              <button className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#071f35] transition-all">
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#071f35] transition-all disabled:opacity-50"
+              >
                 <ChevronRight className="w-4 h-4" />
               </button>
-              <span className="text-xs text-slate-400 ml-2">10 / page</span>
+              <span className="text-xs text-slate-400 ml-2">{itemsPerPage} / page</span>
             </div>
           </div>
         </div>

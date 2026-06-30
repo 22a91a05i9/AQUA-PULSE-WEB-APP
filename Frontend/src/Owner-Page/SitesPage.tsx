@@ -23,6 +23,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { RowActionMenu } from '../lib/tableActions';
 
 type Site = {
   id: string;
@@ -158,6 +159,62 @@ export default function SitesPage() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleDeleteSite = async (site: Site) => {
+    const id = site.id.replace('SITE-', '');
+    if (!window.confirm(`Are you sure you want to delete site "${site.name}"?`)) {
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      await apiRequest(`/owner/sites/${id}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      setSitesList((prev) => prev.filter((s) => s.id !== site.id));
+      alert(`Site "${site.name}" deleted successfully.`);
+    } catch (err: any) {
+      console.error('Failed to delete site:', err);
+      alert(err?.detail || err?.message || 'Failed to delete site.');
+    }
+  };
+
+  const handleEditSite = async (site: Site) => {
+    const id = site.id.replace('SITE-', '');
+    const newName = window.prompt(`Edit site name:`, site.name);
+    if (newName === null) return;
+    const newLocation = window.prompt(`Edit site location:`, site.location);
+    if (newLocation === null) return;
+
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>(`/owner/sites/${id}`, {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          name: newName.trim(),
+          location_text: newLocation.trim(),
+        },
+      });
+      setSitesList((prev) =>
+        prev.map((s) =>
+          s.id === site.id
+            ? { ...s, name: updated.name, location: updated.location_text }
+            : s
+        )
+      );
+      alert(`Site "${site.name}" updated successfully.`);
+    } catch (err: any) {
+      console.error('Failed to update site:', err);
+      alert(err?.detail || err?.message || 'Failed to update site.');
+    }
+  };
 
   // Form Fields
   const [name, setName] = useState('');
@@ -224,11 +281,16 @@ export default function SitesPage() {
         const pond = site.pond || '';
         const name = site.name || '';
         const location = site.location || '';
-        return [pond, name, location].some((item) =>
+        const matchesSearch = [pond, name, location].some((item) =>
           item.toLowerCase().includes(search.toLowerCase())
         );
+        const matchesStatus = statusFilter === 'all' || site.status.toLowerCase() === statusFilter.toLowerCase();
+        const matchesRegion = regionFilter === 'all' || site.location.toLowerCase().includes(regionFilter.toLowerCase());
+        return matchesSearch && matchesStatus && matchesRegion;
+      }).sort((a, b) => {
+        return sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
       }),
-    [search, sitesList],
+    [search, sitesList, statusFilter, regionFilter, sortOrder],
   );
 
   if (loading) {
@@ -286,14 +348,45 @@ export default function SitesPage() {
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-4 text-sm text-white outline-none focus:border-cyan-400/80 transition" placeholder="Search sites by name or location..." />
           </div>
-          {['All Status', 'All Regions', 'All Types'].map((label) => (
-            <button key={label} className="flex h-11 min-w-44 items-center justify-between rounded-lg border border-[#0d3660] bg-[#020b18]/50 px-4 text-left text-sm text-white">
-              <span><span className="block text-xs text-slate-400">{label.split(' ')[1] ? label.split(' ')[1].slice(0, -1) : 'Status'}</span>{label}</span>
-              <ChevronRight className="h-4 w-4 rotate-90" />
-            </button>
-          ))}
-          <button className="flex h-11 items-center gap-3 rounded-lg border border-[#0d3660] px-6 text-sm font-bold text-white"><Filter className="h-4 w-4" />Filter</button>
-          <button className="flex h-11 items-center gap-3 rounded-lg border border-[#0d3660] px-6 text-sm font-bold text-white"><SlidersHorizontal className="h-4 w-4" />Sort</button>
+          {showAdvancedFilters && (
+            <>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-11 min-w-44 rounded-lg border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none"
+              >
+                <option value="all">All Status</option>
+                <option value="Healthy">Healthy</option>
+                <option value="Warning">Warning</option>
+                <option value="Maintenance">Maintenance</option>
+              </select>
+              <select
+                value={regionFilter}
+                onChange={(e) => setRegionFilter(e.target.value)}
+                className="h-11 min-w-44 rounded-lg border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none"
+              >
+                <option value="all">All Regions</option>
+                <option value="Nellore">Nellore</option>
+                <option value="Bhimavaram">Bhimavaram</option>
+                <option value="Godavari">Godavari</option>
+              </select>
+            </>
+          )}
+          <button 
+            onClick={() => setShowAdvancedFilters(prev => !prev)}
+            className={`flex h-11 items-center gap-3 rounded-lg border px-6 text-sm font-bold transition ${
+              showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
+            }`}
+          >
+            <Filter className="h-4 w-4" /> Filter
+          </button>
+          <button 
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="flex h-11 items-center gap-3 rounded-lg border border-[#0d3660] px-6 text-sm font-bold text-white transition hover:bg-[#071f35]"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Sort: {sortOrder.toUpperCase()}
+          </button>
           <button 
             onClick={() => setShowAddModal(true)} 
             className="ml-auto flex h-11 items-center gap-3 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white hover:bg-blue-500 transition cursor-pointer"
@@ -326,7 +419,7 @@ export default function SitesPage() {
               <ScoreCircle score={site.score} label={site.water} />
               <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setSelectedSite(site)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0d3660] text-white hover:border-cyan-400"><Eye className="h-5 w-5" /></button>
-                <button className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0d3660] text-white"><MoreVertical className="h-5 w-5" /></button>
+                <RowActionMenu onEdit={() => handleEditSite(site)} onDelete={() => handleDeleteSite(site)} />
               </div>
             </section>
           ))}
@@ -429,7 +522,7 @@ export default function SitesPage() {
               <ScoreCircle score={site.score} label={site.water} />
               <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setSelectedSite(site)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0d3660] text-white hover:border-cyan-400"><Eye className="h-5 w-5" /></button>
-                <button className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0d3660] text-white"><MoreVertical className="h-5 w-5" /></button>
+                <RowActionMenu onEdit={() => handleEditSite(site)} onDelete={() => handleDeleteSite(site)} />
               </div>
             </section>
           ))}

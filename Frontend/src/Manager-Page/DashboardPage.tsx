@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, Link2, MapPin, Box, Bell, Users, AlertTriangle } from 'lucide-react';
-import { defaultStatsData } from './data'; // fallback mock stats
+import { ArrowRight, CheckCircle2, Link2, MapPin, Box, Users, AlertTriangle } from 'lucide-react';
 import { ControlCenter, Panel, StatCard, ToneIcon } from './components';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
@@ -41,11 +40,11 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
     );
   }
 
-  const ownersCount = data?.stats?.owners !== undefined && data.stats.owners !== 0 ? String(data.stats.owners) : '2';
-  const agentsCount = data?.stats?.agents !== undefined && data.stats.agents !== 0 ? String(data.stats.agents) : '2';
-  const devicesCount = data?.stats?.devices !== undefined && data.stats.devices !== 0 ? String(data.stats.devices) : '5';
-  const sitesCount = data?.stats?.sites !== undefined && data.stats.sites !== 0 ? String(data.stats.sites) : '4';
-  const alertsCount = data?.stats?.open_alerts !== undefined && data.stats.open_alerts !== 0 ? String(data.stats.open_alerts) : '2880';
+  const ownersCount = data ? String(data.stats?.owners ?? 0) : '2';
+  const agentsCount = data ? String(data.stats?.agents ?? 0) : '2';
+  const devicesCount = data ? String(data.stats?.devices ?? 0) : '5';
+  const sitesCount = data ? String(data.stats?.sites ?? 0) : '4';
+  const alertsCount = data ? String(data.stats?.open_alerts ?? 0) : '2880';
 
   const stats = [
     { label: 'Registered Owners', value: ownersCount, icon: Users, tone: 'blue' },
@@ -55,8 +54,8 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
     { label: 'Open Alerts', value: alertsCount, icon: AlertTriangle, tone: 'red' },
   ];
 
-  const ownersList = data?.owners && data.owners.length > 0
-    ? data.owners.map((o: any) => ({
+  const ownersList = data
+    ? (data.owners || []).map((o: any) => ({
         name: o.full_name,
         email: o.email,
         phone: o.phone || 'No phone',
@@ -64,11 +63,18 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
       }))
     : defaultOwners;
 
-  const hasDevices = data?.devices && data.devices.length > 0;
-  const activeDevices = hasDevices ? data.devices.filter((d: any) => d.status === 'active').length : 3;
-  const inactiveDevices = hasDevices ? data.devices.filter((d: any) => d.status !== 'active').length : 2;
-  const assignedDevices = hasDevices ? data.devices.filter((d: any) => d.owner_user_id !== null).length : 4;
-  const unassignedDevices = hasDevices ? data.devices.filter((d: any) => d.owner_user_id === null).length : 1;
+  const activeDevices = data
+    ? (data.devices || []).filter((d: any) => d.status === 'active' || d.status === 'online').length
+    : 3;
+  const inactiveDevices = data
+    ? (data.devices || []).filter((d: any) => d.status !== 'active' && d.status !== 'online').length
+    : 2;
+  const assignedDevices = data
+    ? (data.devices || []).filter((d: any) => d.owner_user_id !== null).length
+    : 4;
+  const unassignedDevices = data
+    ? (data.devices || []).filter((d: any) => d.owner_user_id === null).length
+    : 1;
 
   return (
     <div className="space-y-7 text-left">
@@ -122,10 +128,10 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
           </div>
           <div className="auto-card-grid-sm gap-4 text-left">
             {[
-              { label: 'Active Devices', value: String(activeDevices), desc: 'In operations', tone: 'green', width: '100%' },
-              { label: 'Inactive Devices', value: String(inactiveDevices), desc: 'Stored in warehouse', tone: 'orange', width: '0%' },
-              { label: 'Assigned Devices', value: String(assignedDevices), desc: 'Assigned to owners', tone: 'blue', width: '100%' },
-              { label: 'Unassigned Devices', value: String(unassignedDevices), desc: 'Awaiting assignment', tone: 'purple', width: '0%' },
+              { label: 'Active Devices', value: String(activeDevices), desc: 'In operations', tone: 'green', width: activeDevices + inactiveDevices > 0 ? `${Math.round((activeDevices / (activeDevices + inactiveDevices)) * 100)}%` : '0%' },
+              { label: 'Inactive Devices', value: String(inactiveDevices), desc: 'Stored in warehouse', tone: 'orange', width: activeDevices + inactiveDevices > 0 ? `${Math.round((inactiveDevices / (activeDevices + inactiveDevices)) * 100)}%` : '0%' },
+              { label: 'Assigned Devices', value: String(assignedDevices), desc: 'Assigned to owners', tone: 'blue', width: assignedDevices + unassignedDevices > 0 ? `${Math.round((assignedDevices / (assignedDevices + unassignedDevices)) * 100)}%` : '0%' },
+              { label: 'Unassigned Devices', value: String(unassignedDevices), desc: 'Awaiting assignment', tone: 'purple', width: assignedDevices + unassignedDevices > 0 ? `${Math.round((unassignedDevices / (assignedDevices + unassignedDevices)) * 100)}%` : '0%' },
             ].map((item) => (
               <div key={item.label} className="metric-card rounded-lg border border-[#0d3660] bg-[#031426]/70 p-5">
                 <ToneIcon icon={item.label.includes('Assigned') ? Link2 : CheckCircle2} tone={item.tone} />

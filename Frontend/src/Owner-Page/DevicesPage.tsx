@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   ArrowLeft,
   Battery,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { RowActionMenu, exportRowsToCsv } from '../lib/tableActions';
 
 type DeviceStatus = 'Online' | 'Warning' | 'Offline';
 
@@ -68,6 +69,12 @@ export default function DevicesPage() {
   const [deviceList, setDeviceList] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   useEffect(() => {
     async function fetchDevices() {
@@ -121,6 +128,66 @@ export default function DevicesPage() {
     fetchDevices();
   }, []);
 
+  const handleDeleteDevice = async (device: Device) => {
+    if (!window.confirm(`Are you sure you want to delete and unassign device "${device.id}"?`)) {
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      await apiRequest(`/owner/devices/${device.dbId}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      setDeviceList((prev) => prev.filter((d) => d.dbId !== device.dbId));
+      alert(`Device "${device.id}" unassigned and deleted successfully.`);
+    } catch (err: any) {
+      console.error('Failed to delete device:', err);
+      alert(err?.detail || err?.message || 'Failed to delete device.');
+    }
+  };
+
+  const handleEditDevice = async (device: Device) => {
+    const newStatus = window.prompt(`Edit device status (active/inactive):`, device.status === 'Online' ? 'active' : 'inactive');
+    if (newStatus === null) return;
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>(`/owner/devices/${device.dbId}`, {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          status: newStatus.trim().toLowerCase(),
+        },
+      });
+      setDeviceList((prev) =>
+        prev.map((d) =>
+          d.dbId === device.dbId
+            ? { ...d, status: updated.status === 'active' ? 'Online' : 'Offline' }
+            : d
+        )
+      );
+      alert(`Device status updated successfully.`);
+    } catch (err: any) {
+      console.error('Failed to update device:', err);
+      alert(err?.detail || err?.message || 'Failed to update device.');
+    }
+  };
+
+  const filteredDevices = useMemo(() => {
+    return deviceList
+      .filter((dev) => {
+        const matchesSearch = dev.id.toLowerCase().includes(search.toLowerCase()) || dev.name.toLowerCase().includes(search.toLowerCase()) || dev.site.toLowerCase().includes(search.toLowerCase());
+        const matchesType = typeFilter === 'all' || dev.name.toLowerCase().includes(typeFilter.toLowerCase()) || (typeFilter === 'sensor' && dev.name.toLowerCase().includes('sensor'));
+        const matchesSite = siteFilter === 'all' || dev.site === siteFilter;
+        const matchesStatus = statusFilter === 'all' || dev.status === statusFilter;
+        return matchesSearch && matchesType && matchesSite && matchesStatus;
+      })
+      .sort((a, b) => {
+        return sortOrder === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+      });
+  }, [deviceList, search, typeFilter, siteFilter, statusFilter, sortOrder]);
+
   if (selectedDevice) {
     return <DeviceDetails device={selectedDevice} onBack={() => setSelectedDevice(null)} />;
   }
@@ -149,20 +216,59 @@ export default function DevicesPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[#0d3660]/60 pt-5">
         <div className="relative w-full max-w-md">
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/60 pl-12 pr-4 text-sm text-white outline-none" placeholder="Search devices..." />
+          <input 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/60 pl-12 pr-4 text-sm text-white outline-none" 
+            placeholder="Search devices by ID, name or site..." 
+          />
         </div>
         <div className="flex flex-wrap gap-3">
-          {['All Types', 'All Sites', 'All Status'].map((label) => (
-            <button key={label} className="flex h-12 min-w-40 items-center justify-between gap-8 rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-4 text-sm text-white">
-              {label}
-              <ChevronRight className="h-4 w-4 rotate-90" />
-            </button>
-          ))}
-          <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white">
+          {showAdvancedFilters && (
+            <>
+              <select 
+                value={typeFilter} 
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="h-12 min-w-40 rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-4 text-sm text-white outline-none animate-fade-in"
+              >
+                <option value="all">All Types</option>
+                <option value="sensor">Sensor Devices</option>
+              </select>
+              <select 
+                value={siteFilter} 
+                onChange={(e) => setSiteFilter(e.target.value)}
+                className="h-12 min-w-40 rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-4 text-sm text-white outline-none animate-fade-in"
+              >
+                <option value="all">All Sites</option>
+                {Array.from(new Set(deviceList.map(d => d.site))).map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <select 
+                value={statusFilter} 
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-12 min-w-40 rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-4 text-sm text-white outline-none animate-fade-in"
+              >
+                <option value="all">All Status</option>
+                <option value="Online">Online</option>
+                <option value="Offline">Offline</option>
+                <option value="Warning">Warning</option>
+              </select>
+            </>
+          )}
+          <button 
+            onClick={() => setShowAdvancedFilters(prev => !prev)}
+            className={`flex h-12 items-center gap-2 rounded-lg border px-5 text-sm font-semibold transition ${
+              showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
+            }`}
+          >
             <Filter className="h-4 w-4" /> Filter
           </button>
-          <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white">
-            <Download className="h-4 w-4" /> Sort
+          <button 
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} 
+            className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white transition hover:bg-[#071f35]"
+          >
+            Sort: {sortOrder.toUpperCase()}
           </button>
         </div>
       </div>
@@ -182,7 +288,7 @@ export default function DevicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#0d3660]/60">
-              {deviceList.map((device) => (
+              {filteredDevices.map((device) => (
                 <tr key={device.id} onClick={() => setSelectedDevice(device)} className="cursor-pointer transition hover:bg-[#071f35]/40">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-4">
@@ -218,10 +324,8 @@ export default function DevicesPage() {
                     </p>
                     <p className="mt-1 text-slate-300">{device.batteryLabel}</p>
                   </td>
-                  <td className="pr-5 text-right">
-                    <button className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-[#071f35]">
-                      <MoreVertical className="h-5 w-5" />
-                    </button>
+                  <td className="pr-5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <RowActionMenu onEdit={() => handleEditDevice(device)} onDelete={() => handleDeleteDevice(device)} />
                   </td>
                 </tr>
               ))}

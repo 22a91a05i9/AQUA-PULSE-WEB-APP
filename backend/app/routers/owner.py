@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, delete
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
@@ -261,3 +261,166 @@ def assign_agent_to_site(
     db.add(assignment)
     db.commit()
     return {"message": "Agent assigned successfully"}
+
+
+from pydantic import BaseModel, EmailStr
+
+class AgentUpdate(BaseModel):
+    full_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    password: str | None = None
+
+class SiteUpdate(BaseModel):
+    name: str | None = None
+    site_type: str | None = None
+    location_text: str | None = None
+
+class DeviceUpdatePayload(BaseModel):
+    firmware_version: str | None = None
+    status: str | None = None
+
+
+@router.delete("/agents/{agent_id}")
+def delete_agent(
+    agent_id: int,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    agent = db.scalar(
+        select(User).where(
+            User.id == agent_id,
+            User.owner_user_id == current_user.id,
+            User.role == "agent",
+        )
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    db.execute(delete(Alert).where(Alert.recipient_user_id == agent.id))
+    db.execute(delete(SiteAgentAssignment).where(SiteAgentAssignment.agent_user_id == agent.id))
+    db.delete(agent)
+    db.commit()
+    return {"message": "Agent deleted successfully"}
+
+@router.put("/agents/{agent_id}")
+def update_agent(
+    agent_id: int,
+    payload: AgentUpdate,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    agent = db.scalar(
+        select(User).where(
+            User.id == agent_id,
+            User.owner_user_id == current_user.id,
+            User.role == "agent",
+        )
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if payload.full_name is not None:
+        agent.full_name = payload.full_name
+    if payload.email is not None:
+        agent.email = payload.email
+    if payload.phone is not None:
+        agent.phone = payload.phone
+    if payload.password is not None:
+        agent.password_hash = hash_password(payload.password)
+    db.commit()
+    db.refresh(agent)
+    return UserOut.model_validate(agent)
+
+@router.delete("/sites/{site_id}")
+def delete_site(
+    site_id: int,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    site = db.scalar(
+        select(Site).where(
+            Site.id == site_id,
+            Site.owner_user_id == current_user.id,
+        )
+    )
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    db.execute(delete(Alert).where(Alert.site_id == site.id))
+    db.execute(delete(Reading).where(Reading.site_id == site.id))
+    db.execute(delete(DeviceSiteAssignment).where(DeviceSiteAssignment.site_id == site.id))
+    db.execute(delete(SiteAgentAssignment).where(SiteAgentAssignment.site_id == site.id))
+    db.delete(site)
+    db.commit()
+    return {"message": "Site deleted successfully"}
+
+@router.put("/sites/{site_id}")
+def update_site(
+    site_id: int,
+    payload: SiteUpdate,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    site = db.scalar(
+        select(Site).where(
+            Site.id == site_id,
+            Site.owner_user_id == current_user.id,
+        )
+    )
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    if payload.name is not None:
+        site.name = payload.name
+    if payload.site_type is not None:
+        site.site_type = payload.site_type
+    if payload.location_text is not None:
+        site.location_text = payload.location_text
+    db.commit()
+    db.refresh(site)
+    return SiteOut.model_validate(site)
+
+@router.delete("/devices/{device_id}")
+def delete_device(
+    device_id: int,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    device = db.scalar(
+        select(Device).where(
+            Device.id == device_id,
+            Device.owner_user_id == current_user.id,
+        )
+    )
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    db.execute(delete(Alert).where(Alert.device_id == device.id))
+    db.execute(delete(Reading).where(Reading.device_id == device.id))
+    db.execute(delete(DeviceSiteAssignment).where(DeviceSiteAssignment.device_id == device.id))
+    db.execute(delete(DeviceOwnerAssignment).where(DeviceOwnerAssignment.device_id == device.id))
+    # Unassign owner and site
+    device.owner_user_id = None
+    device.site_id = None
+    device.status = "inactive"
+    db.commit()
+    return {"message": "Device unassigned and deleted from owner successfully"}
+
+@router.put("/devices/{device_id}")
+def update_device(
+    device_id: int,
+    payload: DeviceUpdatePayload,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    device = db.scalar(
+        select(Device).where(
+            Device.id == device_id,
+            Device.owner_user_id == current_user.id,
+        )
+    )
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if payload.firmware_version is not None:
+        device.firmware_version = payload.firmware_version
+    if payload.status is not None:
+        device.status = payload.status
+    db.commit()
+    db.refresh(device)
+    return DeviceOut.model_validate(device)

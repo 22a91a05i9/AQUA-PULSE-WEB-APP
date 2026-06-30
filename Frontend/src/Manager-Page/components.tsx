@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Droplet,
-  Menu,
   Search,
   CalendarDays,
   AlertTriangle,
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AuthSession } from '../lib/auth';
+import { apiRequest } from '../lib/api';
 import { managerNavItems, managerQuickCards, managerUser, statusColors } from './data';
 
 export type ManagerPageId =
@@ -40,11 +40,28 @@ export function ManagerShell({
   onLogout: () => void;
   children: React.ReactNode;
 }) {
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    async function loadAlertCount() {
+      try {
+        const alerts = await apiRequest<AlertNotificationResponse[]>('/manager/alerts', {
+          token: session.token,
+        });
+        setAlertCount(alerts.filter((alert) => alert.status !== 'safe' && alert.status !== 'resolved').length);
+      } catch (err) {
+        console.error('Failed to load manager alert count:', err);
+      }
+    }
+
+    loadAlertCount();
+  }, [session.token]);
+
   return (
     <div className="app-shell manager-shell min-h-screen bg-[#020b18] text-slate-100">
-      <ManagerSidebar currentPage={currentPage} onNavigate={onNavigate} />
+      <ManagerSidebar currentPage={currentPage} onNavigate={onNavigate} alertCount={alertCount} />
       <div className="app-main min-h-screen">
-        <ManagerMobileNav currentPage={currentPage} onNavigate={onNavigate} onLogout={onLogout} />
+        <ManagerMobileNav currentPage={currentPage} onNavigate={onNavigate} onLogout={onLogout} alertCount={alertCount} />
         <ManagerHeader session={session} onLogout={onLogout} onNavigate={onNavigate} />
         <main className="app-content">{children}</main>
       </div>
@@ -56,10 +73,12 @@ function ManagerMobileNav({
   currentPage,
   onNavigate,
   onLogout,
+  alertCount,
 }: {
   currentPage: ManagerPageId;
   onNavigate: (page: ManagerPageId) => void;
   onLogout: () => void;
+  alertCount: number;
 }) {
   const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -78,9 +97,11 @@ function ManagerMobileNav({
         <div className="mobile-nav-actions">
           <button type="button" onClick={() => onNavigate('alerts')} className="mobile-date-chip relative">
             <Bell className="h-4 w-4 text-cyan-300" />
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-              5
-            </span>
+            {alertCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {alertCount > 9 ? '9+' : alertCount}
+              </span>
+            )}
           </button>
           <span className="mobile-date-chip">
             <CalendarDays className="h-4 w-4 text-cyan-300" />
@@ -116,10 +137,27 @@ function ManagerMobileNav({
 function ManagerSidebar({
   currentPage,
   onNavigate,
+  alertCount,
 }: {
   currentPage: ManagerPageId;
   onNavigate: (page: ManagerPageId) => void;
+  alertCount: number;
 }) {
+  const [lastUpdatedTime, setLastUpdatedTime] = useState('');
+
+  useEffect(() => {
+    const now = new Date();
+    setLastUpdatedTime(now.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }) + ' ' + now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }));
+  }, []);
+
   return (
     <aside className="app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#0d3660] bg-[#031426]/95">
       <div className="dashboard-header flex items-center gap-4 border-b border-[#0d3660]">
@@ -132,16 +170,11 @@ function ManagerSidebar({
         </div>
       </div>
 
-      <div className="px-5 py-6 xl:px-7">
-        <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Manager Workspace</p>
-        <p className="mt-3 font-bold text-white">{managerUser.name}</p>
-        <p className="mt-1 text-sm text-slate-300">{managerUser.email}</p>
-      </div>
-
-      <nav className="flex-1 px-3 xl:px-4">
+      <nav className="flex-1 px-3 pt-6 xl:px-4">
         {managerNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
+          const badge = item.id === 'alerts' ? alertCount : item.badge;
 
           return (
             <button
@@ -155,11 +188,11 @@ function ManagerSidebar({
             >
               <Icon className="h-5 w-5 shrink-0" />
               <span className="min-w-0 truncate">{item.label}</span>
-              {item.badge && (
+              {badge ? (
                 <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {item.badge}
+                  {badge}
                 </span>
-              )}
+              ) : null}
             </button>
           );
         })}
@@ -168,16 +201,27 @@ function ManagerSidebar({
       <div className="space-y-3 p-4">
         {managerQuickCards.map((card) => {
           const Icon = card.icon;
+          const displayValue = card.label === 'Last Updated' 
+            ? lastUpdatedTime 
+            : card.label === 'Need Help?' 
+              ? '6303403957' 
+              : card.value;
 
           return (
-            <div key={card.label} className="rounded-lg border border-[#0d3660] bg-[#041526]/80 p-4">
+            <div 
+              key={card.label} 
+              onClick={card.label === 'Need Help?' ? () => alert('Support Number: 6303403957') : undefined}
+              className={`rounded-lg border border-[#0d3660] bg-[#041526]/80 p-4 ${
+                card.label === 'Need Help?' ? 'cursor-pointer hover:bg-[#0c3154] transition' : ''
+              }`}
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-white">{card.label}</p>
-                  <p className="mt-1 text-xs text-slate-300">{card.value}</p>
+                  <p className="mt-1 text-xs text-slate-300">{displayValue || 'Loading...'}</p>
                 </div>
               </div>
             </div>
@@ -198,6 +242,17 @@ interface NotificationItem {
   read: boolean;
 }
 
+interface AlertNotificationResponse {
+  id: number;
+  device_id: number;
+  site_id: number | null;
+  severity: string;
+  title: string;
+  message: string;
+  status: string;
+  created_at: string;
+}
+
 function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession; onLogout: () => void; onNavigate?: (page: ManagerPageId) => void }) {
   // Popover States
   const [showCalendar, setShowCalendar] = useState(false);
@@ -206,14 +261,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
     return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   });
 
-  // Notifications State
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: '1', type: 'critical', message: 'New Owner Registered', device: 'SYS-OWNER', pond: 'Blue Lake Aquafarms', time: '10 min ago', read: false },
-    { id: '2', type: 'critical', message: 'Sensor Activation Failure', device: 'DVC-003', pond: 'Pond 3 Sensor', time: '25 min ago', read: false },
-    { id: '3', type: 'warning', message: 'Suspicious login attempt', device: 'SYS-AUTH', pond: 'Manager Portal', time: '1 hr ago', read: false },
-    { id: '4', type: 'warning', message: 'Database backup completed', device: 'SYS-DB', pond: 'System Logs', time: '2 hr ago', read: false },
-    { id: '5', type: 'info', message: 'Weekly summary generated', device: 'SYS-REP', pond: 'System Reports', time: '3 hr ago', read: false },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -233,6 +281,32 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    async function loadAlertNotifications() {
+      try {
+        const alerts = await apiRequest<AlertNotificationResponse[]>('/manager/alerts', {
+          token: session.token,
+        });
+
+        setNotifications(
+          alerts.slice(0, 5).map((alert) => ({
+            id: String(alert.id),
+            type: alert.severity === 'critical' || alert.severity === 'warning' ? alert.severity : 'info',
+            message: alert.title || alert.message || 'Water quality alert',
+            device: `Device #${alert.device_id}`,
+            pond: alert.site_id ? `Site #${alert.site_id}` : 'Owner device alert',
+            time: new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            read: false,
+          }))
+        );
+      } catch (err) {
+        console.error('Failed to load manager alert notifications:', err);
+      }
+    }
+
+    loadAlertNotifications();
+  }, [session.token]);
 
   const handleMarkAllRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -273,10 +347,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
   const daysOfGrid = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
 
   return (
-    <header className="dashboard-header hidden items-center justify-between border-b border-[#0d3660] bg-[#031426]/80 backdrop-blur z-30 relative lg:flex">
-      <button className="flex h-10 w-10 items-center justify-center rounded-md text-slate-200 hover:bg-[#071f35]">
-        <Menu className="h-6 w-6" />
-      </button>
+    <header className="dashboard-header hidden items-center justify-end border-b border-[#0d3660] bg-[#031426]/80 backdrop-blur z-30 relative lg:flex">
       <div className="dashboard-header-actions flex items-center gap-4">
         <div className="relative hidden lg:block">
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -387,7 +458,11 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
 
               {/* Notification List */}
               <div className="max-h-72 overflow-y-auto space-y-2.5">
-                {notifications.map((notification) => {
+                {notifications.length === 0 ? (
+                  <div className="rounded-lg border border-[#0d3660]/50 bg-[#071f35]/30 p-4 text-center text-xs text-slate-400">
+                    No recent owner device alerts.
+                  </div>
+                ) : notifications.map((notification) => {
                   return (
                     <div
                       key={notification.id}

@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Monitor, Save, Search } from 'lucide-react';
-import { devices as defaultDevices, tableActionsIcon } from './data';
-import { Panel, SelectField, StatusBadge, TablePager, ToneIcon } from './components';
+import { useEffect, useMemo, useState } from 'react';
+import { Download, Monitor, Save, Search } from 'lucide-react';
+import { devices as defaultDevices } from './data';
+import { Panel, StatusBadge, TablePager, ToneIcon } from './components';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
-
-const MoreVertical = tableActionsIcon;
+import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
 
 export default function DevicesPage() {
   const [deviceList, setDeviceList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [editingDeviceId, setEditingDeviceId] = useState<number | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -29,22 +30,26 @@ export default function DevicesPage() {
         });
 
         const normalized = apiDevices.map((d: any) => ({
+          dbId: d.id,
           id: d.device_uid || 'DVC-UNKNOWN',
           name: `Device ${(d.device_uid || '').slice(-4)}`,
           type: d.firmware_version || 'Sensor',
           site: d.site_id ? `Site #${d.site_id}` : 'Warehouse',
           status: d.status === 'active' ? 'Active' : 'Inactive',
-          registered: 'May 17, 2024',
-          time: '10:30 AM',
+          rawStatus: d.status,
+          imei: d.imei || '',
+          simNumber: d.sim_number || '',
+          registered: d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
+          time: d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
         }));
 
         setDeviceList(normalized);
       } else {
-        setDeviceList(defaultDevices);
+        setDeviceList(defaultDevices.map((device, index) => ({ ...device, dbId: index + 1, rawStatus: device.status.toLowerCase(), imei: '', simNumber: '' })));
       }
     } catch (err) {
       console.error('Failed to load devices from DB, using fallback defaults:', err);
-      setDeviceList(defaultDevices);
+      setDeviceList(defaultDevices.map((device, index) => ({ ...device, dbId: index + 1, rawStatus: device.status.toLowerCase(), imei: '', simNumber: '' })));
     } finally {
       setLoading(false);
     }
@@ -53,6 +58,11 @@ export default function DevicesPage() {
   useEffect(() => {
     loadDevices();
   }, []);
+
+  const filteredDevices = useMemo(
+    () => deviceList.filter((device) => rowMatchesSearch([device.name, device.id, device.type, device.site, device.status], search)),
+    [deviceList, search],
+  );
 
   if (loading) {
     return (
@@ -72,8 +82,8 @@ export default function DevicesPage() {
     try {
       const session = getAuthSession();
       if (session) {
-        await apiRequest('/manager/devices', {
-          method: 'POST',
+        await apiRequest(editingDeviceId ? `/manager/devices/${editingDeviceId}` : '/manager/devices', {
+          method: editingDeviceId ? 'PUT' : 'POST',
           token: session.token,
           body: JSON.stringify({
             device_uid: deviceUid.trim(),
@@ -90,12 +100,55 @@ export default function DevicesPage() {
         setImei('');
         setSimNumber('');
         setStatus('inactive');
-        setMessage('Device successfully registered in database!');
+        setEditingDeviceId(null);
+        setMessage(editingDeviceId ? 'Device successfully updated in database!' : 'Device successfully registered in database!');
         loadDevices();
       }
     } catch (err: any) {
       setMessage('Failed to register device: ' + (err.message || String(err)));
     }
+  };
+
+  const editDevice = (device: any) => {
+    setEditingDeviceId(device.dbId);
+    setName(device.name);
+    setDeviceUid(device.id);
+    setImei(device.imei || '');
+    setSimNumber(device.simNumber || '');
+    setStatus(device.rawStatus || (device.status === 'Active' ? 'active' : 'inactive'));
+    setDeviceType(device.type);
+    setMessage('Editing selected device.');
+  };
+
+  const deleteDevice = async (device: any) => {
+    if (!window.confirm(`Delete ${device.id}? This removes the device from the database.`)) return;
+
+    const session = getAuthSession();
+    if (session && device.dbId) {
+      await apiRequest(`/manager/devices/${device.dbId}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      loadDevices();
+    } else {
+      setDeviceList((current) => current.filter((item) => item.id !== device.id));
+    }
+
+    setMessage('Device deleted successfully.');
+  };
+
+  const exportDevices = () => {
+    exportRowsToCsv(
+      'aqua-pulse-devices.csv',
+      filteredDevices.map((device) => ({
+        Name: device.name,
+        DeviceId: device.id,
+        Type: device.type,
+        Site: device.site,
+        Status: device.status,
+        Registered: device.registered,
+      })),
+    );
   };
 
   return (
@@ -110,8 +163,8 @@ export default function DevicesPage() {
           <div className="mb-6 flex items-center gap-4">
             <ToneIcon icon={Monitor} tone="cyan" />
             <div>
-              <h2 className="text-lg font-extrabold text-white">Register Device</h2>
-              <p className="mt-1 text-sm text-slate-300">Enter the device details to register a new device in the platform.</p>
+              <h2 className="text-lg font-extrabold text-white">{editingDeviceId ? 'Edit Device' : 'Register Device'}</h2>
+              <p className="mt-1 text-sm text-slate-300">Enter the device details to save it in the platform.</p>
             </div>
           </div>
           
@@ -158,7 +211,24 @@ export default function DevicesPage() {
           )}
 
           <div className="mt-6">
-            <button type="submit" className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-white cursor-pointer hover:from-cyan-400 hover:to-blue-500 transition"><Save className="h-5 w-5" /> Register Device</button>
+            <button type="submit" className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-white cursor-pointer hover:from-cyan-400 hover:to-blue-500 transition"><Save className="h-5 w-5" /> {editingDeviceId ? 'Update Device' : 'Register Device'}</button>
+            {editingDeviceId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDeviceId(null);
+                  setName('');
+                  setDeviceUid('');
+                  setImei('');
+                  setSimNumber('');
+                  setStatus('inactive');
+                  setMessage('');
+                }}
+                className="mt-3 flex h-11 w-full items-center justify-center rounded-md border border-[#0d3660] font-bold text-white"
+              >
+                Cancel Edit
+              </button>
+            )}
           </div>
         </Panel>
       </form>
@@ -174,8 +244,12 @@ export default function DevicesPage() {
           </div>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input className="h-11 w-80 rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none" placeholder="Search devices..." />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-80 rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none" placeholder="Search devices..." />
           </div>
+          <button onClick={exportDevices} className="flex h-11 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white">
+            <Download className="h-4 w-4" />
+            Export
+          </button>
         </div>
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[#0d3660] text-slate-400">
@@ -190,27 +264,27 @@ export default function DevicesPage() {
             </tr>
           </thead>
           <tbody>
-            {deviceList.length === 0 ? (
+            {filteredDevices.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-slate-400">No registered devices found. Use the form above to register one.</td>
+                <td colSpan={7} className="py-6 text-center text-slate-400">No devices match the current search.</td>
               </tr>
             ) : (
-              deviceList.map((device, idx) => (
-                <tr key={idx} className="border-b border-[#0d3660]/60">
+              filteredDevices.map((device) => (
+                <tr key={device.id} className="border-b border-[#0d3660]/60">
                   <td className="py-4 font-semibold text-white">{device.name}</td>
                   <td className="text-slate-300">{device.id}</td>
                   <td className="text-slate-300">{device.type}</td>
                   <td className="text-slate-300">{device.site}</td>
                   <td><StatusBadge status={device.status} /></td>
                   <td className="text-slate-300">{device.registered}<br /><span className="text-xs">{device.time}</span></td>
-                  <td className="text-right"><MoreVertical className="ml-auto h-5 w-5 text-slate-300" /></td>
+                  <td className="text-right"><RowActionMenu onEdit={() => editDevice(device)} onDelete={() => deleteDevice(device)} /></td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
         <div className="mt-5 flex items-center justify-between text-xs text-slate-305">
-          <p className="text-sm text-slate-300">Showing 1 to {deviceList.length} of {deviceList.length} devices</p>
+          <p className="text-sm text-slate-300">Showing {filteredDevices.length === 0 ? 0 : 1} to {filteredDevices.length} of {deviceList.length} devices</p>
           <TablePager />
         </div>
       </Panel>

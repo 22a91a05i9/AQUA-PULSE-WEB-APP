@@ -17,11 +17,56 @@ import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
+import { RowActionMenu } from '../lib/tableActions';
 
 export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const session = getAuthSession();
   const [ownerData, setOwnerData] = useState<any>(session?.user || null);
   const [agentsList, setAgentsList] = useState<any[]>([]);
+
+  const handleDeleteAgent = async (agent: any) => {
+    if (!window.confirm(`Are you sure you want to delete agent "${agent.full_name || agent.name}"?`)) {
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      await apiRequest(`/owner/agents/${agent.id}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      setAgentsList((prev) => prev.filter((a) => a.id !== agent.id));
+      setMessage(`Agent "${agent.full_name || agent.name}" deleted successfully.`);
+    } catch (err: any) {
+      console.error('Failed to delete agent:', err);
+      alert(err?.detail || err?.message || 'Failed to delete agent.');
+    }
+  };
+
+  const handleEditAgent = async (agent: any) => {
+    const newName = window.prompt(`Edit name for agent:`, agent.full_name || agent.name);
+    if (newName === null) return;
+    const newPhone = window.prompt(`Edit phone for agent:`, agent.phone || '');
+    if (newPhone === null) return;
+
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>(`/owner/agents/${agent.id}`, {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          full_name: newName.trim(),
+          phone: newPhone.trim(),
+        },
+      });
+      setAgentsList((prev) => prev.map((a) => (a.id === agent.id ? updated : a)));
+      setMessage(`Agent profile updated successfully.`);
+    } catch (err: any) {
+      console.error('Failed to update agent:', err);
+      alert(err?.detail || err?.message || 'Failed to update agent.');
+    }
+  };
   const { theme, changeTheme } = useTheme();
   const { t, lang, changeLanguage } = useTranslation();
   const [message, setMessage] = useState('');
@@ -110,9 +155,7 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
               <p className="flex items-center gap-2 text-sm text-slate-300"><Mail className="h-4 w-4" /> {member.email}</p>
               <p className="flex items-center gap-2 text-sm text-slate-300"><Phone className="h-4 w-4" /> {member.phone || 'No phone'}</p>
               <span className="rounded-md bg-cyan-500/15 px-2 py-1 text-center text-xs font-bold text-cyan-300">Agent</span>
-              <button className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-[#071f35]">
-                <MoreVertical className="h-4 w-4" />
-              </button>
+              <RowActionMenu onEdit={() => handleEditAgent(member)} onDelete={() => handleDeleteAgent(member)} />
             </div>
           ))}
           {agentsList.length === 0 && (

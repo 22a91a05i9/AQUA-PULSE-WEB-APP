@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Sidebar, { agentNavItems } from './components/Sidebar';
 import Header, { StatusBar } from './components/Header';
 import { Bell, CalendarDays, Fish } from 'lucide-react';
@@ -15,6 +15,7 @@ import SosEmergencyPage from './Agent-Page/SosEmergencyPage';
 import ManagerApp from './Manager-Page/ManagerApp';
 import OwnerApp from './Owner-Page/OwnerApp';
 import { getAuthSession, logout, type AuthSession } from './lib/auth';
+import { apiRequest } from './lib/api';
 
 const agentPageTitles: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Agent Dashboard', subtitle: '' },
@@ -100,6 +101,25 @@ function AgentMobileNav({
   onLogout: () => void;
 }) {
   const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    async function loadAlertCount() {
+      try {
+        const session = getAuthSession();
+        if (!session) return;
+
+        const alerts = await apiRequest<Array<{ status: string }>>('/readings/alerts/me', {
+          token: session.token,
+        });
+        setAlertCount(alerts.filter((alert) => alert.status !== 'safe' && alert.status !== 'resolved').length);
+      } catch (err) {
+        console.error('Failed to load agent alert count:', err);
+      }
+    }
+
+    loadAlertCount();
+  }, []);
 
   return (
     <div className="mobile-workspace-nav lg:hidden">
@@ -116,9 +136,11 @@ function AgentMobileNav({
         <div className="mobile-nav-actions">
           <button type="button" onClick={() => onNavigate('alerts')} className="mobile-date-chip relative">
             <Bell className="h-4 w-4 text-cyan-300" />
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-              5
-            </span>
+            {alertCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {alertCount > 9 ? '9+' : alertCount}
+              </span>
+            )}
           </button>
           <span className="mobile-date-chip">
             <CalendarDays className="h-4 w-4 text-cyan-300" />

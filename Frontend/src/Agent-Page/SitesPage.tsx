@@ -17,6 +17,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { RowActionMenu } from '../lib/tableActions';
 
 interface Site {
   id: string;
@@ -50,6 +51,10 @@ export default function SitesPage() {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     async function loadData() {
@@ -122,6 +127,9 @@ export default function SitesPage() {
     return matchesSearch && matchesStatus && matchesRegion;
   });
 
+  const totalPages = Math.ceil(filteredSites.length / itemsPerPage) || 1;
+  const paginatedSites = filteredSites.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6 animate-fade-in relative text-slate-350">
       {/* Header Filters */}
@@ -138,148 +146,248 @@ export default function SitesPage() {
         </div>
 
         <div className="flex w-full sm:w-auto items-center gap-3 justify-end">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4]"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="critical">Critical</option>
-          </select>
+          {showAdvancedFilters && (
+            <>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4] animate-fade-in"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="critical">Critical</option>
+              </select>
 
-          <select
-            value={regionFilter}
-            onChange={(e) => setRegionFilter(e.target.value)}
-            className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4]"
-          >
-            <option value="all">All Regions</option>
-            <option value="South India">South India</option>
-            <option value="East India">East India</option>
-            <option value="North India">North India</option>
-          </select>
+              <select
+                value={regionFilter}
+                onChange={(e) => {
+                  setRegionFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4] animate-fade-in"
+              >
+                <option value="all">All Regions</option>
+                <option value="South India">South India</option>
+                <option value="East India">East India</option>
+                <option value="North India">North India</option>
+              </select>
+            </>
+          )}
 
-          <button className="h-10 px-3 flex items-center gap-2 rounded-lg border border-slate-700/50 bg-[#041526]/50 text-sm text-slate-300 hover:text-white transition">
+          <button 
+            onClick={() => setShowAdvancedFilters(prev => !prev)}
+            className={`h-10 px-3 flex items-center gap-2 rounded-lg border text-sm transition ${
+              showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-slate-700/50 bg-[#041526]/50 text-slate-300 hover:text-white'
+            }`}
+          >
             <SlidersHorizontal className="w-4 h-4" />
-            <span>More Filters</span>
+            <span>Filters</span>
           </button>
 
           <div className="flex border border-slate-700/50 rounded-lg overflow-hidden bg-[#041526]/50">
-            <button className="p-2.5 text-slate-400 hover:text-white bg-[#06b6d4]/10 text-[#22d3ee]">
+            <button 
+              onClick={() => setViewMode('list')}
+              className={`p-2.5 transition ${viewMode === 'list' ? 'bg-[#06b6d4]/10 text-[#22d3ee]' : 'text-slate-400 hover:text-white'}`}
+            >
               <List className="w-4 h-4" />
             </button>
-            <button className="p-2.5 text-slate-400 hover:text-white">
+            <button 
+              onClick={() => setViewMode('grid')}
+              className={`p-2.5 transition ${viewMode === 'grid' ? 'bg-[#06b6d4]/10 text-[#22d3ee]' : 'text-slate-400 hover:text-white'}`}
+            >
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Sites List Table */}
-      <div className="glass rounded-xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#041526]/30">
-                <th className="py-4 px-6">Site Name</th>
-                <th className="py-4 px-6">Location</th>
-                <th className="py-4 px-6">Region</th>
-                <th className="py-4 px-6 text-center">Ponds</th>
-                <th className="py-4 px-6 text-center">Devices</th>
-                <th className="py-4 px-6">Status</th>
-                <th className="py-4 px-6">Last Updated</th>
-                <th className="py-4 px-6 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
-              {filteredSites.map((site) => (
-                <tr
-                  key={site.id}
-                  className="table-row-hover hover:bg-[#071f35]/30 cursor-pointer transition"
-                  onClick={() => setSelectedSite(site)}
+      {/* Sites List/Grid Layout Container */}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {paginatedSites.map((site) => (
+            <div
+              key={site.id}
+              onClick={() => setSelectedSite(site)}
+              className="glass rounded-xl overflow-hidden border border-[#0d3660]/60 hover:border-[#06b6d4] transition cursor-pointer flex flex-col hover:bg-[#071f35]/10"
+            >
+              <div className="relative h-40 w-full overflow-hidden">
+                <div
+                  className="h-full w-full object-cover bg-cover bg-center"
+                  style={{
+                    backgroundImage: "url('/images/dashboard_attached.png')",
+                    backgroundSize: '265%',
+                    backgroundPosition: '23.4% 32.5%',
+                    backgroundRepeat: 'no-repeat',
+                  }}
+                />
+                <span
+                  className="absolute bottom-3 left-3 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize bg-[#041526]/80 text-[#22d3ee] border border-[#06b6d4]/40"
                 >
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-lg overflow-hidden shrink-0"
-                        style={{
-                          backgroundImage: "url('/images/dashboard_attached.png')",
-                          backgroundSize: '265%',
-                          backgroundPosition: '23.4% 32.5%',
-                          backgroundRepeat: 'no-repeat',
-                        }}
-                      />
-                      <div>
-                        <div className="font-semibold text-white">{site.name}</div>
-                        <div className="text-xs text-slate-500">{site.id}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 max-w-xs truncate">{site.location}</td>
-                  <td className="py-4 px-6">{site.region}</td>
-                  <td className="py-4 px-6 text-center font-medium text-white">{site.ponds}</td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="font-medium text-white">{site.devices}</span>
-                      <span className="text-xs text-slate-500">Online</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
-                      style={{
-                        backgroundColor: statusColors[site.status] + '20',
-                        color: statusColors[site.status],
-                        border: `1px solid ${statusColors[site.status]}30`,
-                      }}
-                    >
-                      {site.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-slate-400">{site.lastUpdated}</td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setSelectedSite(site)}
-                        className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                        title="View Site Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  {site.status}
+                </span>
+              </div>
+              <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white leading-tight">{site.name}</h3>
+                  <p className="text-xs text-slate-500 font-mono mt-1">{site.id}</p>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed line-clamp-2">{site.location}</p>
+                </div>
 
-        {/* Pagination */}
+                <div className="grid grid-cols-3 gap-2 border-t border-[#0d3660]/40 pt-4 text-center text-xs">
+                  <div>
+                    <span className="block text-slate-500 font-medium">Ponds</span>
+                    <span className="block text-white font-bold mt-0.5">{site.ponds}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 font-medium">Devices</span>
+                    <span className="block text-white font-bold mt-0.5">{site.devices}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 font-medium">Type</span>
+                    <span className="block text-white font-bold mt-0.5 truncate">{site.siteType}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredSites.length === 0 && (
+            <div className="col-span-full py-12 text-center text-slate-400">
+              No aquaculture sites found matching the filters.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="glass rounded-xl overflow-hidden shadow-2xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#041526]/30">
+                  <th className="py-4 px-6">Site Name</th>
+                  <th className="py-4 px-6">Location</th>
+                  <th className="py-4 px-6">Region</th>
+                  <th className="py-4 px-6 text-center">Ponds</th>
+                  <th className="py-4 px-6 text-center">Devices</th>
+                  <th className="py-4 px-6">Status</th>
+                  <th className="py-4 px-6">Last Updated</th>
+                  <th className="py-4 px-6 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
+                {paginatedSites.map((site) => (
+                  <tr
+                    key={site.id}
+                    className="table-row-hover hover:bg-[#071f35]/30 cursor-pointer transition"
+                    onClick={() => setSelectedSite(site)}
+                  >
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-lg overflow-hidden shrink-0"
+                          style={{
+                            backgroundImage: "url('/images/dashboard_attached.png')",
+                            backgroundSize: '265%',
+                            backgroundPosition: '23.4% 32.5%',
+                            backgroundRepeat: 'no-repeat',
+                          }}
+                        />
+                        <div>
+                          <div className="font-semibold text-white">{site.name}</div>
+                          <div className="text-xs text-slate-500">{site.id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 max-w-xs truncate">{site.location}</td>
+                    <td className="py-4 px-6">{site.region}</td>
+                    <td className="py-4 px-6 text-center font-medium text-white">{site.ponds}</td>
+                    <td className="py-4 px-6 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="font-medium text-white">{site.devices}</span>
+                        <span className="text-xs text-slate-500">Online</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
+                        style={{
+                          backgroundColor: statusColors[site.status] + '20',
+                          color: statusColors[site.status],
+                          border: `1px solid ${statusColors[site.status]}30`,
+                        }}
+                      >
+                        {site.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-slate-400">{site.lastUpdated}</td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => setSelectedSite(site)}
+                          className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                          title="View Site Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <RowActionMenu 
+                          onEdit={() => alert('Access Denied: Only Owners and Managers can edit sites.')}
+                          onDelete={() => alert('Access Denied: Only Owners and Managers can delete sites.')}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredSites.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                      No aquaculture sites found matching the filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination wrapper for the list/grid */}
+      <div className="glass rounded-xl overflow-hidden shadow-2xl mt-4">
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#041526]/10">
           <div className="text-xs text-slate-400">
-            Showing 1 to {filteredSites.length} of {sitesList.length} sites
+            Showing {filteredSites.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length} sites
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">Rows per page</span>
-              <select className="bg-transparent border-none text-xs text-white focus:outline-none">
-                <option value="10">10</option>
-                <option value="20">20</option>
-              </select>
+              <span className="text-xs text-white bg-transparent px-1">{itemsPerPage}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50" disabled>
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50"
+              >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <button className="w-7 h-7 rounded-lg text-xs font-medium bg-[#06b6d4] text-white">1</button>
-              <button className="w-7 h-7 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition">2</button>
-              <button className="w-7 h-7 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition">3</button>
-              <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-7 h-7 rounded-lg text-xs font-medium transition ${
+                    currentPage === page ? 'bg-[#06b6d4] text-white' : 'text-slate-450 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50"
+              >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

@@ -22,6 +22,7 @@ import {
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
+import { RowActionMenu } from '../lib/tableActions';
 
 const securityItems = [
   { label: 'Change Password', desc: 'Update your account password', icon: Lock },
@@ -298,9 +299,10 @@ export default function SettingsPage() {
                     <Phone className="w-3 h-3 text-[#22d3ee]" />
                     {contact.phone}
                   </div>
-                  <button className="text-slate-400 hover:text-white transition-colors">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
+                  <RowActionMenu 
+                    onEdit={() => alert(`Editing alert contact: ${contact.name}`)}
+                    onDelete={() => alert(`Deleting alert contact: ${contact.name}`)}
+                  />
                 </div>
               </div>
             ))}

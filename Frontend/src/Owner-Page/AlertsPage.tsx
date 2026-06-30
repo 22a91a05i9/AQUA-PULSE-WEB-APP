@@ -25,6 +25,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { exportRowsToCsv } from '../lib/tableActions';
 
 type AlertTone = 'Critical' | 'Warning' | 'Info' | 'Resolved';
 
@@ -56,6 +57,10 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   async function loadAlerts() {
     try {
@@ -117,11 +122,15 @@ export default function AlertsPage() {
     return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} />;
   }
 
-  const filtered = alerts.filter(a => 
-    a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    a.site.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    a.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filtered = alerts.filter(a => {
+    const matchesSearch = a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.site.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSeverity = severityFilter === 'all' || a.tone.toLowerCase() === severityFilter.toLowerCase();
+    const matchesSite = siteFilter === 'all' || a.site.toLowerCase().includes(siteFilter.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? (a.tone !== 'Resolved') : (a.tone === 'Resolved'));
+    return matchesSearch && matchesSeverity && matchesSite && matchesStatus;
+  });
 
   const activeAlerts = filtered.filter(a => a.tone === 'Critical' || a.tone === 'Warning' || a.tone === 'Info');
   const occurredAlerts = filtered.filter(a => a.tone === 'Resolved');
@@ -130,6 +139,22 @@ export default function AlertsPage() {
   const warningCount = alerts.filter(a => a.tone === 'Warning').length;
   const infoCount = alerts.filter(a => a.tone === 'Info').length;
   const resolvedCount = alerts.filter(a => a.tone === 'Resolved').length;
+
+  const exportAlerts = () => {
+    exportRowsToCsv(
+      'aqua-pulse-owner-alerts.csv',
+      filtered.map((a) => ({
+        ID: a.id,
+        Title: a.title,
+        Site: a.site,
+        Metric: a.metric,
+        Time: a.time,
+        Severity: a.tone,
+        DeviceID: a.deviceId,
+        Description: a.description,
+      })),
+    );
+  };
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -150,16 +175,48 @@ export default function AlertsPage() {
             placeholder="Search alerts by device, pond or site..." 
           />
         </div>
-        {['All Severities', 'All Sites', 'All Statuses'].map((label) => (
-          <button key={label} className="flex h-12 min-w-48 items-center justify-between rounded-lg border border-[#0d3660] bg-[#020b18]/55 px-4 text-sm font-semibold text-white">
-            {label}
-            <ChevronRight className="h-4 w-4 rotate-90" />
-          </button>
-        ))}
-        <button className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-7 text-sm font-semibold text-white">
+        {showAdvancedFilters && (
+          <>
+            <select
+              value={severityFilter}
+              onChange={(e) => setSeverityFilter(e.target.value)}
+              className="h-12 min-w-48 rounded-lg border border-[#0d3660] bg-[#020b18]/55 px-4 text-sm font-semibold text-white outline-none"
+            >
+              <option value="all">All Severities</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+            <select
+              value={siteFilter}
+              onChange={(e) => setSiteFilter(e.target.value)}
+              className="h-12 min-w-48 rounded-lg border border-[#0d3660] bg-[#020b18]/55 px-4 text-sm font-semibold text-white outline-none"
+            >
+              <option value="all">All Sites</option>
+              {Array.from(new Set(alerts.map(a => a.site).filter(Boolean))).map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-12 min-w-48 rounded-lg border border-[#0d3660] bg-[#020b18]/55 px-4 text-sm font-semibold text-white outline-none"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </>
+        )}
+        <button 
+          onClick={() => setShowAdvancedFilters(prev => !prev)}
+          className={`flex h-12 items-center gap-3 rounded-lg border px-7 text-sm font-semibold transition ${
+            showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
+          }`}
+        >
           <Filter className="h-5 w-5" /> Filter
         </button>
-        <button className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-7 text-sm font-semibold text-white">
+        <button onClick={exportAlerts} className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-7 text-sm font-semibold text-white">
           <Download className="h-5 w-5" /> Export
         </button>
       </div>

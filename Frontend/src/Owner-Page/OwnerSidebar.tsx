@@ -88,14 +88,17 @@ export default function OwnerSidebar({
       </nav>
 
       <div className="p-4 space-y-2 border-t border-[#0d3660]/50">
-        <div className="rounded-lg border border-[#0d3660] bg-[#041526]/80 p-4">
+        <div 
+          onClick={() => alert('Support Number: 6303403957')}
+          className="rounded-lg border border-[#0d3660] bg-[#041526]/80 p-4 cursor-pointer hover:bg-[#0c3154] transition"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-500/15">
               <Headphones className="h-5 w-5 text-cyan-300" />
             </div>
             <div>
               <p className="text-sm font-bold text-white">{t('Need Help?')}</p>
-              <p className="text-xs text-slate-300">{t('Contact Support')}</p>
+              <p className="text-xs text-slate-300">6303403957</p>
             </div>
           </div>
         </div>

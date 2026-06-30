@@ -13,6 +13,7 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
 
     thresholds = reading.site.custom_thresholds or reading.site.species.default_thresholds or {}
 
+    owner_user_id = reading.owner_user_id
     recipients = []
     if reading.site.owner:
         recipients.append(reading.site.owner)
@@ -52,7 +53,7 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
                 reading_id=reading.id,
                 device_id=reading.device_id,
                 site_id=reading.site_id,
-                owner_user_id=recipient.id if recipient.role == "owner" else None,
+                owner_user_id=owner_user_id,
                 agent_user_id=recipient.id if recipient.role == "agent" else None,
                 recipient_user_id=recipient.id,
                 recipient_role=recipient.role,

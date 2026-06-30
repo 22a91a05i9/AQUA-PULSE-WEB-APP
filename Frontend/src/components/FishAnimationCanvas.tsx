@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 interface FishIndividual {
   x: number;
   y: number;
+  baseY: number;
   vx: number;
   vy: number;
   size: number;
@@ -31,10 +32,10 @@ function createFish(
   type: FishIndividual['type']
 ): FishIndividual {
   return {
-    x, y, vx, vy, size,
+    x, y, baseY: y, vx, vy, size,
     tailPhase: Math.random() * Math.PI * 2,
     tailSpeed: type === 'large' ? 0.06 : 0.12 + Math.random() * 0.06,
-    color, bodyAlpha: 0.85,
+    color, bodyAlpha: type === 'schooling' ? 0.68 : 0.88,
     glowRadius: type === 'large' ? 20 : 10,
     glowColor, type,
   };
@@ -55,29 +56,45 @@ export default function FishAnimationCanvas() {
     canvas.height = H;
 
     // ---- School of small fish (like the image — dark silhouettes, mid-left) ----
-    const schoolSize = 18;
-    const school: FishIndividual[] = Array.from({ length: schoolSize }, (_, i) => {
-      const row = Math.floor(i / 6);
-      const col = i % 6;
-      return createFish(
-        W * 0.12 + col * 28 + row * 10,
-        H * 0.52 + row * 22 + Math.random() * 10,
-        0.55 + Math.random() * 0.3,
-        (Math.random() - 0.5) * 0.2,
-        9 + Math.random() * 4,
-        '#1a3a5c',
-        'rgba(0,180,220,0.15)',
-        'schooling'
-      );
-    });
+    const createSchool = (
+      count: number,
+      startX: number,
+      startY: number,
+      direction: 1 | -1,
+      spreadX: number,
+      spreadY: number,
+      baseSpeed: number,
+      color: string,
+    ) =>
+      Array.from({ length: count }, (_, i) => {
+        const row = Math.floor(i / 7);
+        const col = i % 7;
+        return createFish(
+          startX + direction * (col * spreadX + row * 12 + Math.random() * 18),
+          startY + row * spreadY + (Math.random() - 0.5) * 14,
+          direction * (baseSpeed + Math.random() * 0.28),
+          (Math.random() - 0.5) * 0.18,
+          8 + Math.random() * 5,
+          color,
+          'rgba(34,211,238,0.2)',
+          'schooling'
+        );
+      });
+
+    const school: FishIndividual[] = [
+      ...createSchool(22, -120, H * 0.60, 1, 26, 18, 0.85, '#143f60'),
+      ...createSchool(16, W + 130, H * 0.34, -1, 24, 14, 0.7, '#155e75'),
+      ...createSchool(14, -220, H * 0.76, 1, 34, 13, 0.48, '#0f2d45'),
+    ];
 
     // ---- A few glowing solo fish scattered ----
     const soloFish: FishIndividual[] = [
-      createFish(-80, H * 0.38, 0.7, 0.05, 18, '#22d3ee', 'rgba(34,211,238,0.4)', 'solo'),
-      createFish(-200, H * 0.65, 0.5, -0.05, 14, '#60a5fa', 'rgba(96,165,250,0.4)', 'solo'),
-      createFish(W + 100, H * 0.30, -0.6, 0.03, 16, '#34d399', 'rgba(52,211,153,0.35)', 'solo'),
-      createFish(W + 50, H * 0.72, -0.45, -0.05, 22, '#22d3ee', 'rgba(34,211,238,0.3)', 'large'),
-      createFish(-150, H * 0.80, 0.35, 0.04, 26, '#0ea5e9', 'rgba(14,165,233,0.3)', 'large'),
+      createFish(-90, H * 0.25, 0.92, 0.04, 16, '#22d3ee', 'rgba(34,211,238,0.45)', 'solo'),
+      createFish(-240, H * 0.48, 0.72, -0.04, 14, '#60a5fa', 'rgba(96,165,250,0.42)', 'solo'),
+      createFish(W + 120, H * 0.28, -0.78, 0.03, 15, '#34d399', 'rgba(52,211,153,0.38)', 'solo'),
+      createFish(W + 180, H * 0.66, -0.52, -0.04, 24, '#22d3ee', 'rgba(34,211,238,0.34)', 'large'),
+      createFish(-180, H * 0.82, 0.46, 0.04, 28, '#0ea5e9', 'rgba(14,165,233,0.32)', 'large'),
+      createFish(W + 280, H * 0.52, -0.64, 0.02, 18, '#7dd3fc', 'rgba(125,211,252,0.36)', 'solo'),
     ];
 
     // ---- Bubbles ----
@@ -189,12 +206,12 @@ export default function FishAnimationCanvas() {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(dir, 1);
-      ctx.globalAlpha = 0.72;
+      ctx.globalAlpha = fish.bodyAlpha;
 
       // Body silhouette
       ctx.beginPath();
       ctx.ellipse(0, 0, size, size * 0.4, 0, 0, Math.PI * 2);
-      ctx.fillStyle = '#0f2d45';
+      ctx.fillStyle = fish.color;
       ctx.fill();
 
       // Tail
@@ -203,7 +220,7 @@ export default function FishAnimationCanvas() {
       ctx.lineTo(-size * 1.3, tailSwing - size * 0.38);
       ctx.lineTo(-size * 1.3, tailSwing + size * 0.38);
       ctx.closePath();
-      ctx.fillStyle = '#0f2d45';
+      ctx.fillStyle = fish.color;
       ctx.fill();
 
       // Dorsal
@@ -211,7 +228,7 @@ export default function FishAnimationCanvas() {
       ctx.moveTo(-size * 0.05, -size * 0.36);
       ctx.quadraticCurveTo(size * 0.2, -size * 0.65, size * 0.42, -size * 0.36);
       ctx.closePath();
-      ctx.fillStyle = '#0f2d45';
+      ctx.fillStyle = fish.color;
       ctx.fill();
 
       // Subtle blue glow on the fish
@@ -219,7 +236,7 @@ export default function FishAnimationCanvas() {
       ctx.shadowColor = 'rgba(0,160,210,0.3)';
       ctx.beginPath();
       ctx.ellipse(0, 0, size, size * 0.4, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,100,160,0.1)';
+      ctx.fillStyle = 'rgba(34,211,238,0.12)';
       ctx.fill();
       ctx.shadowBlur = 0;
 
@@ -233,14 +250,15 @@ export default function FishAnimationCanvas() {
       ctx.clearRect(0, 0, W, H);
 
       // ---- Update and draw school ----
-      // School cohesion: keep fish together and moving right
+      // Keep the schools together while letting multiple lanes cross the scene.
       const centerX = school.reduce((s, f) => s + f.x, 0) / school.length;
       const centerY = school.reduce((s, f) => s + f.y, 0) / school.length;
 
       school.forEach((fish, i) => {
         // Gentle cohesion + wander
-        fish.vx += (centerX - fish.x) * 0.0003 + Math.sin(time * 0.6 + i) * 0.005 + 0.004;
-        fish.vy += (centerY - fish.y) * 0.0003 + Math.cos(time * 0.5 + i * 0.7) * 0.004;
+        const direction = fish.vx >= 0 ? 1 : -1;
+        fish.vx += (centerX - fish.x) * 0.00005 + Math.sin(time * 0.7 + i) * 0.004 + direction * 0.003;
+        fish.vy += (fish.baseY - fish.y) * 0.0012 + (centerY - fish.y) * 0.00008 + Math.cos(time * 0.55 + i * 0.7) * 0.004;
 
         // Separation from neighbors
         school.forEach((other, j) => {
@@ -256,18 +274,26 @@ export default function FishAnimationCanvas() {
 
         // Clamp speed
         const spd = Math.sqrt(fish.vx * fish.vx + fish.vy * fish.vy);
-        const maxSpd = 1.2;
+        const maxSpd = 1.35;
         if (spd > maxSpd) { fish.vx = (fish.vx / spd) * maxSpd; fish.vy = (fish.vy / spd) * maxSpd; }
 
         fish.x += fish.vx;
-        fish.y += fish.vy;
+        fish.y += fish.vy + Math.sin(time * 1.1 + i * 0.4) * 0.08;
         fish.tailPhase += fish.tailSpeed;
 
         // Wrap
-        if (fish.x > W + 60) fish.x = -60;
-        if (fish.x < -60) fish.x = W + 60;
-        if (fish.y > H + 40) fish.y = -40;
-        if (fish.y < -40) fish.y = H + 40;
+        if (fish.vx > 0 && fish.x > W + 80) {
+          fish.x = -80 - Math.random() * 160;
+          fish.baseY = H * (0.28 + Math.random() * 0.55);
+          fish.y = fish.baseY;
+        }
+        if (fish.vx < 0 && fish.x < -80) {
+          fish.x = W + 80 + Math.random() * 160;
+          fish.baseY = H * (0.24 + Math.random() * 0.5);
+          fish.y = fish.baseY;
+        }
+        if (fish.y > H + 40) fish.y = fish.baseY = H * 0.72;
+        if (fish.y < -40) fish.y = fish.baseY = H * 0.26;
 
         drawSchoolFish(fish);
       });
@@ -275,7 +301,7 @@ export default function FishAnimationCanvas() {
       // ---- Update and draw solo / large fish ----
       soloFish.forEach((fish) => {
         fish.x += fish.vx;
-        fish.y += fish.vy + Math.sin(time * 0.5 + fish.tailPhase) * 0.15;
+        fish.y += fish.vy + Math.sin(time * 0.7 + fish.tailPhase) * 0.18;
         fish.tailPhase += fish.tailSpeed;
 
         // Wrap around

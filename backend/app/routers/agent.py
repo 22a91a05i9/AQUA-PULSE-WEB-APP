@@ -108,3 +108,18 @@ def verify_agent_alert(
     verify_alert_as_safe(db, alert)
     refreshed = db.scalar(select(Alert).where(Alert.id == alert_id))
     return AlertOut.model_validate(refreshed)
+
+
+@router.delete("/alerts/{alert_id}")
+def delete_agent_alert(
+    alert_id: int,
+    current_user: User = Depends(require_role("agent")),
+    db: Session = Depends(get_db),
+):
+    alert = db.scalar(select(Alert).where(Alert.id == alert_id))
+    if not alert or alert.recipient_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+
+    db.delete(alert)
+    db.commit()
+    return {"message": "Alert deleted successfully"}

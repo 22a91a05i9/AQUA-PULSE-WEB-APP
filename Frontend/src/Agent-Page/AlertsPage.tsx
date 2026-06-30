@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Search,
   Eye,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
@@ -10,10 +9,10 @@ import {
   Calendar,
   Filter,
   Check,
-  ShieldAlert,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { exportRowsToCsv, RowActionMenu } from '../lib/tableActions';
 
 interface AlertItem {
   id: string;
@@ -97,6 +96,21 @@ export default function AlertsPage() {
     }
   };
 
+  const handleDeleteAlert = async (alertId: string) => {
+    if (!window.confirm(`Delete alert ${alertId}?`)) return;
+
+    const session = getAuthSession();
+    if (session) {
+      await apiRequest(`/agent/alerts/${alertId}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      loadAlerts();
+    } else {
+      setAlertsList((current) => current.filter((alert) => alert.id !== alertId));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -123,6 +137,22 @@ export default function AlertsPage() {
 
     return matchesSearch && matchesSeverity && matchesTab;
   });
+
+  const exportAlerts = () => {
+    exportRowsToCsv(
+      'aqua-pulse-agent-alerts.csv',
+      filteredAlerts.map((alert) => ({
+        Id: alert.id,
+        Severity: alert.severity,
+        Message: alert.message,
+        Details: alert.details,
+        Device: alert.device,
+        Pond: alert.pond,
+        Time: alert.time,
+        Status: alert.status,
+      })),
+    );
+  };
 
   return (
     <div className="space-y-6 animate-fade-in text-slate-300">
@@ -167,7 +197,7 @@ export default function AlertsPage() {
             <span>Filters</span>
           </button>
 
-          <button className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-[#06b6d4] text-white text-xs font-semibold hover:bg-[#0891b2] transition">
+          <button onClick={exportAlerts} className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-[#06b6d4] text-white text-xs font-semibold hover:bg-[#0891b2] transition">
             <Download className="w-3.5 h-3.5" />
             <span>Export</span>
           </button>
@@ -285,9 +315,7 @@ export default function AlertsPage() {
                       <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
+                      <RowActionMenu onEdit={() => window.alert(`Editing alert ${alert.id}`)} onDelete={() => handleDeleteAlert(alert.id)} />
                     </div>
                   </td>
                 </tr>

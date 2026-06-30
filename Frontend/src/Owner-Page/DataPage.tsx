@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, Filter, Search } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { exportRowsToCsv, rowMatchesSearch } from '../lib/tableActions';
 
 type ReadingItem = {
   deviceId: string;
@@ -17,6 +18,7 @@ type ReadingItem = {
 export default function DataPage() {
   const [readingsList, setReadingsList] = useState<ReadingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -69,6 +71,30 @@ export default function DataPage() {
     loadData();
   }, []);
 
+  const filteredReadings = useMemo(
+    () =>
+      readingsList.filter((reading) =>
+        rowMatchesSearch([reading.deviceId, reading.pond, reading.temp, reading.ph, reading.do, reading.turbidity, reading.conductivity, reading.time], search),
+      ),
+    [readingsList, search],
+  );
+
+  const exportReadings = () => {
+    exportRowsToCsv(
+      'aqua-pulse-readings.csv',
+      filteredReadings.map((reading) => ({
+        DeviceId: reading.deviceId,
+        Pond: reading.pond,
+        TemperatureC: reading.temp,
+        Ph: reading.ph,
+        DissolvedOxygen: reading.do,
+        Turbidity: reading.turbidity,
+        Conductivity: reading.conductivity,
+        Time: reading.time,
+      })),
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -85,13 +111,13 @@ export default function DataPage() {
           <div className="flex gap-3">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className="h-11 w-72 rounded-lg border border-[#0d3660] bg-[#020b18]/60 pl-11 pr-4 text-sm text-white outline-none" placeholder="Search readings..." />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-72 rounded-lg border border-[#0d3660] bg-[#020b18]/60 pl-11 pr-4 text-sm text-white outline-none" placeholder="Search readings..." />
             </div>
             <button className="flex h-11 items-center gap-2 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white">
               <Filter className="h-4 w-4" />
               Filters
             </button>
-            <button className="flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white">
+            <button onClick={exportReadings} className="flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white">
               <Download className="h-4 w-4" />
               Export
             </button>
@@ -112,7 +138,7 @@ export default function DataPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#0d3660]/70">
-              {readingsList.map((reading, index) => (
+              {filteredReadings.map((reading, index) => (
                 <tr key={index} className="hover:bg-[#071f35]/25 transition">
                   <td className="py-5 px-4 text-lg text-white font-semibold">{reading.deviceId}</td>
                   <td className="text-lg text-white font-medium">{reading.pond}</td>
@@ -124,10 +150,10 @@ export default function DataPage() {
                   <td className="text-base text-slate-300">{reading.time}</td>
                 </tr>
               ))}
-              {readingsList.length === 0 && (
+              {filteredReadings.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400">
-                    No recent readings loaded from database.
+                    No readings match the current search.
                   </td>
                 </tr>
               )}
@@ -135,7 +161,7 @@ export default function DataPage() {
           </table>
         </div>
         <div className="mt-5 flex items-center justify-between text-slate-300">
-          <p>Showing {readingsList.length} of {readingsList.length} readings</p>
+          <p>Showing {filteredReadings.length} of {readingsList.length} readings</p>
           <div className="flex gap-2">
             {['‹', '1', '›'].map((page) => (
               <button key={page} className={`h-10 min-w-10 rounded-lg border border-[#0d3660] px-3 ${page === '1' ? 'bg-blue-600 text-white' : 'text-slate-300'}`}>

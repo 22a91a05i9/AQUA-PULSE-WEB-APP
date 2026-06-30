@@ -1,13 +1,13 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Eye, Filter, Grid2X2, Plus, Search, Upload, UserCheck } from 'lucide-react';
-import { owners as defaultOwners, tableActionsIcon } from './data';
+import { Eye, Grid2X2, Plus, Search, Upload, UserCheck } from 'lucide-react';
+import { owners as defaultOwners } from './data';
 import { Panel, PrimaryButton, StatCard, StatusBadge, TablePager } from './components';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
-
-const MoreVertical = tableActionsIcon;
+import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
 
 interface OwnerRecord {
+  id: number | null;
   initials: string;
   name: string;
   email: string;
@@ -30,6 +30,9 @@ export default function OwnersPage() {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('All Status');
+  const [editingOwnerId, setEditingOwnerId] = useState<number | null>(null);
 
   const loadOwners = async () => {
     try {
@@ -44,6 +47,7 @@ export default function OwnersPage() {
           const joinedStr = created ? created.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently';
           const timeStr = created ? created.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
           return {
+            id: o.id,
             initials: (o.full_name || 'U').split(' ').filter(Boolean).map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
             name: o.full_name || 'Unnamed Owner',
             email: o.email,
@@ -57,13 +61,15 @@ export default function OwnersPage() {
         setOwnerList(normalized);
         setSelectedOwner(normalized[0] || null);
       } else {
-        setOwnerList(defaultOwners);
-        setSelectedOwner(defaultOwners[0] || null);
+        const fallbackOwners = defaultOwners.map((owner, index) => ({ ...owner, id: index + 1 }));
+        setOwnerList(fallbackOwners);
+        setSelectedOwner(fallbackOwners[0] || null);
       }
     } catch (err) {
       console.error('Failed to load owners from DB, using fallback defaults:', err);
-      setOwnerList(defaultOwners);
-      setSelectedOwner(defaultOwners[0] || null);
+      const fallbackOwners = defaultOwners.map((owner, index) => ({ ...owner, id: index + 1 }));
+      setOwnerList(fallbackOwners);
+      setSelectedOwner(fallbackOwners[0] || null);
     } finally {
       setLoading(false);
     }
@@ -81,6 +87,16 @@ export default function OwnersPage() {
     return { active, inactive, invited, total: ownerList.length };
   }, [ownerList]);
 
+  const filteredOwners = useMemo(
+    () =>
+      ownerList.filter((owner) => {
+        const matchesSearch = rowMatchesSearch([owner.name, owner.email, owner.phone, owner.status, owner.joined], search);
+        const matchesStatus = status === 'All Status' || owner.status === status;
+        return matchesSearch && matchesStatus;
+      }),
+    [ownerList, search, status],
+  );
+
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -95,9 +111,9 @@ export default function OwnersPage() {
     setMessage('');
   };
 
-  const createOwner = async () => {
+  const saveOwner = async () => {
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
-      setMessage('Enter name, email, and phone before creating an owner.');
+      setMessage('Enter name, email, and phone before saving an owner.');
       return;
     }
 
@@ -106,24 +122,63 @@ export default function OwnersPage() {
     try {
       const session = getAuthSession();
       if (session) {
-        await apiRequest('/manager/owners', {
-          method: 'POST',
+        await apiRequest(editingOwnerId ? `/manager/owners/${editingOwnerId}` : '/manager/owners', {
+          method: editingOwnerId ? 'PUT' : 'POST',
           token: session.token,
           body: JSON.stringify({
             full_name: form.name.trim(),
             email: form.email.trim(),
             phone: form.phone.trim(),
-            password: password,
+            password: editingOwnerId && !form.password.trim() ? undefined : password,
           }),
         });
 
         setForm(initialForm);
-        setMessage('Owner created and saved successfully in database!');
+        setEditingOwnerId(null);
+        setMessage(editingOwnerId ? 'Owner updated successfully in database!' : 'Owner created and saved successfully in database!');
         loadOwners();
       }
     } catch (err: any) {
       setMessage('Failed to save owner to database: ' + (err.message || String(err)));
     }
+  };
+
+  const editOwner = (owner: OwnerRecord) => {
+    setEditingOwnerId(owner.id);
+    setSelectedOwner(owner);
+    setForm({ name: owner.name, email: owner.email, phone: owner.phone, password: '' });
+    setMessage('Editing selected owner.');
+  };
+
+  const deleteOwner = async (owner: OwnerRecord) => {
+    if (!window.confirm(`Delete ${owner.name}? This removes the owner from the database.`)) return;
+
+    const session = getAuthSession();
+    if (session && owner.id) {
+      await apiRequest(`/manager/owners/${owner.id}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      loadOwners();
+    } else {
+      setOwnerList((current) => current.filter((item) => item.email !== owner.email));
+    }
+
+    if (selectedOwner?.email === owner.email) setSelectedOwner(null);
+    setMessage('Owner deleted successfully.');
+  };
+
+  const exportOwners = () => {
+    exportRowsToCsv(
+      'aqua-pulse-owners.csv',
+      filteredOwners.map((owner) => ({
+        Name: owner.name,
+        Email: owner.email,
+        Phone: owner.phone,
+        Status: owner.status,
+        Joined: owner.joined,
+      })),
+    );
   };
 
   return (
@@ -136,10 +191,15 @@ export default function OwnersPage() {
         <div className="flex flex-wrap gap-3">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none" placeholder="Search owners by name, email or phone..." />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-12 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none" placeholder="Search owners by name, email or phone..." />
           </div>
-          <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Filter className="h-4 w-4" /> All Status</button>
-          <button className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Upload className="h-4 w-4" /> Export</button>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-12 rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-4 text-sm font-semibold text-white outline-none">
+            <option>All Status</option>
+            <option>Active</option>
+            <option>Inactive</option>
+            <option>Invited</option>
+          </select>
+          <button onClick={exportOwners} className="flex h-12 items-center gap-2 rounded-lg border border-[#0d3660] px-4 text-sm font-semibold text-white"><Upload className="h-4 w-4" /> Export</button>
         </div>
       </div>
       <div className="auto-card-grid gap-5">
@@ -169,12 +229,12 @@ export default function OwnersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#0d3660]/40">
-                {ownerList.length === 0 ? (
+                {filteredOwners.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">No registered owners found. Use the form on the right to onboard one.</td>
+                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">No owners match the current search.</td>
                   </tr>
                 ) : (
-                  ownerList.map((owner) => (
+                  filteredOwners.map((owner) => (
                     <tr
                       key={owner.email}
                       onClick={() => setSelectedOwner(owner)}
@@ -202,9 +262,7 @@ export default function OwnersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                        <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#0d3660] text-slate-300 hover:border-cyan-400 transition">
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
+                        <RowActionMenu onEdit={() => editOwner(owner)} onDelete={() => deleteOwner(owner)} />
                       </td>
                     </tr>
                   ))
@@ -218,7 +276,7 @@ export default function OwnersPage() {
         </Panel>
         <div className="space-y-5">
           <Panel>
-            <h2 className="mb-6 text-xl font-bold text-white">Create New Owner</h2>
+            <h2 className="mb-6 text-xl font-bold text-white">{editingOwnerId ? 'Edit Owner' : 'Create New Owner'}</h2>
             <div className="space-y-4">
               <label className="block">
                 <span className="text-sm font-semibold text-white">Full Name</span>
@@ -264,7 +322,20 @@ export default function OwnersPage() {
                 </p>
               )}
               <div className="pt-2">
-                <PrimaryButton onClick={createOwner}>Register Owner</PrimaryButton>
+                <PrimaryButton onClick={saveOwner}>{editingOwnerId ? 'Update Owner' : 'Register Owner'}</PrimaryButton>
+                {editingOwnerId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingOwnerId(null);
+                      setForm(initialForm);
+                      setMessage('');
+                    }}
+                    className="ml-3 h-12 rounded-md border border-[#0d3660] px-5 text-sm font-bold text-white"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
           </Panel>

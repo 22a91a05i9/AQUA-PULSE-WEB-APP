@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, CalendarDays, ChevronDown, RefreshCw, AlertTriangle, AlertCircle, CircleDot } from 'lucide-react';
 import type { AuthUser } from '../lib/auth';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 import { useTranslation } from '../lib/i18n';
 
 interface HeaderProps {
@@ -21,6 +23,18 @@ interface NotificationItem {
   read: boolean;
 }
 
+interface AlertNotificationResponse {
+  id: number;
+  device_id: number;
+  site_id: number | null;
+  metric: string;
+  severity: string;
+  title: string;
+  message: string;
+  status: string;
+  created_at: string;
+}
+
 export default function Header({ title, subtitle, actions, user, onNavigate }: HeaderProps) {
   const avatarUrl =
     user.avatarUrl ||
@@ -35,14 +49,7 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
     return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   });
 
-  // Notifications State
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: '1', type: 'critical', message: 'pH level high', device: 'AQ-DVC-003', pond: 'Pond 03', time: '10 min ago', read: false },
-    { id: '2', type: 'critical', message: 'Low Dissolved Oxygen', device: 'AQ-DVC-002', pond: 'Pond 02', time: '25 min ago', read: false },
-    { id: '3', type: 'warning', message: 'High Turbidity', device: 'AQ-DVC-001', pond: 'Pond 01', time: '1 hr ago', read: false },
-    { id: '4', type: 'warning', message: 'Temperature high', device: 'AQ-DVC-006', pond: 'Pond 06', time: '2 hr ago', read: false },
-    { id: '5', type: 'info', message: 'Device battery low (20%)', device: 'AQ-DVC-007', pond: 'Pond 07', time: '3 hr ago', read: false },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -62,6 +69,37 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    async function loadNotifications() {
+      try {
+        const session = getAuthSession();
+        if (!session) return;
+
+        const alerts = await apiRequest<AlertNotificationResponse[]>('/readings/alerts/me', {
+          token: session.token,
+        });
+
+        setNotifications(
+          alerts.slice(0, 8).map((alert) => ({
+            id: String(alert.id),
+            type: alert.severity === 'critical' || alert.severity === 'warning' ? alert.severity : 'info',
+            message: alert.title || alert.message || 'Water quality alert',
+            device: `Device #${alert.device_id}`,
+            pond: alert.site_id ? `Site #${alert.site_id}` : 'Unassigned site',
+            time: new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            read: alert.status === 'safe' || alert.status === 'resolved',
+          }))
+        );
+      } catch (err) {
+        console.error('Failed to load alert notifications:', err);
+      }
+    }
+
+    if (user.role === 'owner' || user.role === 'agent') {
+      loadNotifications();
+    }
+  }, [user.role]);
 
   const handleMarkAllRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -211,7 +249,11 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
 
               {/* Notification List */}
               <div className="max-h-72 overflow-y-auto space-y-2.5">
-                {notifications.map((notification) => {
+                {notifications.length === 0 ? (
+                  <div className="rounded-lg border border-[#0d3660]/50 bg-[#071f35]/30 p-4 text-center text-xs text-slate-400">
+                    No recent alerts.
+                  </div>
+                ) : notifications.map((notification) => {
                   return (
                     <div
                       key={notification.id}
@@ -279,11 +321,27 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
 }
 
 export function StatusBar() {
+  const [lastUpdated, setLastUpdated] = useState('');
+
+  useEffect(() => {
+    const now = new Date();
+    setLastUpdated(now.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }) + ' - ' + now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }));
+  }, []);
+
   return (
     <div className="flex items-center justify-between px-8 py-2 bg-[#020b18]/60 text-xs text-slate-400">
       <div className="flex items-center gap-2">
         <RefreshCw className="w-3 h-3" />
-        <span>Last updated: May 18, 2024 - 10:30:40 AM</span>
+        <span>Last updated: {lastUpdated || 'Loading...'}</span>
       </div>
       <div className="flex items-center gap-1.5">
         <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />

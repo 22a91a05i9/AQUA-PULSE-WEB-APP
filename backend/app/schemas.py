@@ -35,6 +35,13 @@ class OwnerCreate(BaseModel):
     password: str = Field(min_length=8)
 
 
+class OwnerUpdate(BaseModel):
+    full_name: str
+    email: EmailStr
+    phone: str | None = None
+    password: str | None = None
+
+
 class AgentCreate(BaseModel):
     full_name: str
     email: EmailStr
@@ -56,6 +63,10 @@ class DeviceCreate(BaseModel):
     @classmethod
     def trim_device_uid(cls, value: str) -> str:
         return value.strip()
+
+
+class DeviceUpdate(DeviceCreate):
+    pass
 
 
 class AssignOwnerRequest(BaseModel):
@@ -183,8 +194,9 @@ class AlertOut(BaseModel):
     reading_id: int
     device_id: int
     site_id: int | None = None
-    recipient_user_id: int
-    recipient_role: str
+    owner_user_id: int | None = None
+    recipient_user_id: int | None = None
+    recipient_role: str | None = None
     metric: str
     severity: str
     threshold_min: float | None = None
@@ -260,4 +272,3 @@ class EmergencyOut(BaseModel):
     resolved_by_user_id: int | None = None
     created_at: datetime
     resolved_at: datetime | None = None
-
