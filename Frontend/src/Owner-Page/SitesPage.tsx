@@ -42,6 +42,18 @@ type Site = {
 
 const siteImage = '/images/dashboard_attached.png';
 
+function formatSeen(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+}
+
 const defaultSites: Site[] = [
   { id: 'GVF-001', pond: 'Pond 01', name: 'Green Valley Farm', location: '123 Green Valley Rd, Gorantla, West Godavari, Andhra Pradesh 534102', water: 'Good', area: '4.2 acres', ponds: 12, devices: 26, agents: 5, score: 85, status: 'Healthy', type: 'Freshwater' },
   { id: 'BLA-002', pond: 'Pond 02', name: 'Blue Lake Aquafarms', location: '67/4 Blue Beach, Nellore, Andhra Pradesh 524 003', water: 'Good', area: '4 Acres', ponds: 8, devices: 19, agents: 4, score: 78, status: 'Healthy', type: 'Brackishwater' },
@@ -163,6 +175,10 @@ export default function SitesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [regionFilter, setRegionFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [deviceList, setDeviceList] = useState<any[]>([]);
+  const [alertsList, setAlertsList] = useState<any[]>([]);
+  const [readingsList, setReadingsList] = useState<any[]>([]);
+  const [assignmentsList, setAssignmentsList] = useState<any[]>([]);
 
   const handleDeleteSite = async (site: Site) => {
     const id = site.id.replace('SITE-', '');
@@ -230,45 +246,76 @@ export default function SitesPage() {
       return;
     }
 
-    // 1. Load Sites
     try {
-      const apiSites = await apiRequest<any[]>('/owner/sites', {
+      const res = await apiRequest<any>('/owner/overview', {
         token: session.token,
       });
 
-      const normalizedSites: Site[] = apiSites.map((s) => ({
-        id: `SITE-${s.id}`,
-        pond: `Site #${s.id}`,
-        name: s.name || 'Unnamed Site',
-        location: s.location_text || 'No location set',
-        water: 'Good',
-        area: s.custom_thresholds?.area || '4.0 acres',
-        ponds: 1,
-        devices: 1,
-        agents: 1,
-        score: 80,
-        status: 'Healthy',
-        type: (s.name || '').toLowerCase().includes('brackish') ? 'Brackishwater' : 'Freshwater',
-      }));
+      const devices = res.devices || [];
+      const alerts = res.alerts || [];
+      const readings = res.recent_readings || [];
+      const agents = res.agents || [];
+      const assignments = res.agent_assignments || [];
+
+      setDeviceList(devices);
+      setAlertsList(alerts);
+      setReadingsList(readings);
+      setAgentsList(agents);
+      setAssignmentsList(assignments);
+
+      const normalizedSites: Site[] = (res.sites || []).map((s: any) => {
+        const siteDevicesCount = s.devices_count ?? 0;
+        const siteAgentsCount = s.agents_count ?? 0;
+
+        // Calculate dynamic water quality score for the site
+        const siteReadings = readings.filter((r: any) => r.site_id === s.id);
+        let siteScore = 80;
+        let siteWater = 'Good';
+        if (siteReadings.length > 0) {
+          let scoreSum = 0;
+          siteReadings.slice(0, 5).forEach((r: any) => {
+            let rScore = 100;
+            if (r.ph < 6.5 || r.ph > 8.5) rScore -= 20;
+            if (r.temperature_c < 20 || r.temperature_c > 35) rScore -= 20;
+            if (r.turbidity > 150) rScore -= 30;
+            scoreSum += rScore;
+          });
+          siteScore = Math.round(scoreSum / Math.min(siteReadings.length, 5));
+          siteWater = siteScore >= 80 ? 'Good' : 'Warning';
+        }
+
+        // Calculate dynamic status for the site
+        const siteAlerts = alerts.filter((a: any) => a.site_id === s.id && a.status === 'open');
+        let siteStatus = 'Healthy';
+        if (siteAlerts.some((a: any) => a.severity === 'critical')) {
+          siteStatus = 'Warning'; // Using Warning style class
+        } else if (siteAlerts.length > 0) {
+          siteStatus = 'Warning';
+        }
+
+        return {
+          id: `SITE-${s.id}`,
+          pond: `Site #${s.id}`,
+          name: s.name || 'Unnamed Site',
+          location: s.location_text || 'No location set',
+          water: siteWater,
+          area: s.custom_thresholds?.area || '4.0 acres',
+          ponds: 1,
+          devices: siteDevicesCount,
+          agents: siteAgentsCount,
+          score: siteScore,
+          status: siteStatus,
+          type: (s.name || '').toLowerCase().includes('brackish') ? 'Brackishwater' : 'Freshwater',
+        };
+      });
 
       setSitesList(normalizedSites);
     } catch (err) {
-      console.error('Failed to retrieve Sites from DB, using fallback defaults:', err);
+      console.error('Failed to retrieve overview data from DB, using fallback defaults:', err);
       setSitesList(defaultSites);
+    } finally {
+      setLoading(false);
     }
-
-    // 2. Load Agents
-    try {
-      const apiAgents = await apiRequest<any[]>('/owner/agents', {
-        token: session.token,
-      });
-      setAgentsList(apiAgents);
-    } catch (err) {
-      console.error('Failed to retrieve Agents from DB:', err);
-      setAgentsList([]);
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -462,7 +509,17 @@ export default function SitesPage() {
           </div>
         )}
 
-        {selectedSite && <SiteModal site={selectedSite} agentsList={agentsList} onClose={() => setSelectedSite(null)} />}
+        {selectedSite && (
+          <SiteModal 
+            site={selectedSite} 
+            agentsList={agentsList} 
+            deviceList={deviceList}
+            alertsList={alertsList}
+            readingsList={readingsList}
+            assignmentsList={assignmentsList}
+            onClose={() => setSelectedSite(null)} 
+          />
+        )}
       </div>
     );
   } catch (renderError) {
@@ -532,7 +589,23 @@ export default function SitesPage() {
   }
 }
 
-function SiteModal({ site, agentsList, onClose }: { site: Site; agentsList: any[]; onClose: () => void }) {
+function SiteModal({
+  site,
+  agentsList,
+  deviceList,
+  alertsList,
+  readingsList,
+  assignmentsList,
+  onClose,
+}: {
+  site: Site;
+  agentsList: any[];
+  deviceList: any[];
+  alertsList: any[];
+  readingsList: any[];
+  assignmentsList: any[];
+  onClose: () => void;
+}) {
   const [tab, setTab] = useState('Overview');
   const tabs = ['Overview', 'Ponds', 'Devices', 'Agents', 'Water Quality', 'Alerts', 'History'];
 
@@ -566,7 +639,15 @@ function SiteModal({ site, agentsList, onClose }: { site: Site; agentsList: any[
           ))}
         </nav>
 
-        <SiteTabContent tab={tab} site={site} agentsList={agentsList} />
+        <SiteTabContent 
+          tab={tab} 
+          site={site} 
+          agentsList={agentsList} 
+          deviceList={deviceList}
+          alertsList={alertsList}
+          readingsList={readingsList}
+          assignmentsList={assignmentsList}
+        />
 
         <div className="mt-4 flex justify-end">
           <button onClick={onClose} className="rounded-lg bg-blue-600 hover:bg-blue-500 px-8 py-3 font-bold text-white transition cursor-pointer">Close</button>
@@ -576,26 +657,51 @@ function SiteModal({ site, agentsList, onClose }: { site: Site; agentsList: any[
   );
 }
 
-function SiteTabContent({ tab, site, agentsList }: { tab: string; site: Site; agentsList: any[] }) {
+function SiteTabContent({
+  tab,
+  site,
+  agentsList,
+  deviceList,
+  alertsList,
+  readingsList,
+  assignmentsList,
+}: {
+  tab: string;
+  site: Site;
+  agentsList: any[];
+  deviceList: any[];
+  alertsList: any[];
+  readingsList: any[];
+  assignmentsList: any[];
+}) {
   switch (tab) {
     case 'Ponds':
-      return <PondsTab />;
+      return <PondsTab site={site} deviceList={deviceList} readingsList={readingsList} assignmentsList={assignmentsList} agentsList={agentsList} />;
     case 'Devices':
-      return <DevicesTab />;
+      return <DevicesTab site={site} deviceList={deviceList} />;
     case 'Agents':
-      return <AgentsTab agentsList={agentsList} />;
+      return <AgentsTab site={site} agentsList={agentsList} assignmentsList={assignmentsList} />;
     case 'Water Quality':
-      return <WaterQualityTab site={site} />;
+      return <WaterQualityTab site={site} readingsList={readingsList} />;
     case 'Alerts':
-      return <AlertsTab />;
+      return <AlertsTab site={site} alertsList={alertsList} />;
     case 'History':
-      return <HistoryTab />;
+      return <HistoryTab site={site} readingsList={readingsList} />;
     default:
-      return <OverviewTab site={site} />;
+      return <OverviewTab site={site} readingsList={readingsList} />;
   }
 }
 
-function OverviewTab({ site }: { site: Site }) {
+function OverviewTab({ site, readingsList }: { site: Site; readingsList: any[] }) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteReadings = readingsList.filter((r: any) => r.site_id === dbSiteId);
+  const latest = siteReadings[0];
+
+  const getDOValue = (temp: number) => (8.5 - (temp - 20) * 0.15).toFixed(1);
+  const doVal = latest ? `${getDOValue(latest.temperature_c)} mg/L` : 'N/A';
+  const phVal = latest ? String(latest.ph.toFixed(1)) : 'N/A';
+  const tempVal = latest ? `${latest.temperature_c.toFixed(1)} °C` : 'N/A';
+
   return (
     <div className="mt-4 grid grid-cols-3 gap-4">
       <Panel title="Site Overview">
@@ -614,18 +720,45 @@ function OverviewTab({ site }: { site: Site }) {
       <Panel title="Water Quality Summary">
         <div className="grid grid-cols-2 gap-3">
           <QualityBox label="Water Quality Score" value={String(site.score)} sub={site.water} circle />
-          <QualityBox label="Dissolved Oxygen" value="6.8 mg/L" sub="Good" />
-          <QualityBox label="pH Level" value="7.2" sub="Normal" />
-          <QualityBox label="Temperature" value="23.5 °C" sub="Normal" />
+          <QualityBox label="Dissolved Oxygen" value={doVal} sub={latest ? 'Good' : 'No Data'} />
+          <QualityBox label="pH Level" value={phVal} sub={latest ? 'Normal' : 'No Data'} />
+          <QualityBox label="Temperature" value={tempVal} sub={latest ? 'Normal' : 'No Data'} />
         </div>
       </Panel>
     </div>
   );
 }
 
-function DevicesTab() {
-  const [selectedDevId, setSelectedDevId] = useState('DEV-1001');
-  const selectedDev = devicesData[selectedDevId] || devicesData['DEV-1001'];
+function DevicesTab({ site, deviceList }: { site: Site; deviceList: any[] }) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteDevices = deviceList.filter((d: any) => d.site_id === dbSiteId);
+
+  const mappedDevices = siteDevices.map((d: any) => {
+    let battery = 95;
+    if (d.latest_reading && d.latest_reading.battery_v != null) {
+      const v = d.latest_reading.battery_v;
+      if (v >= 4.2) battery = 100;
+      else if (v <= 3.0) battery = 0;
+      else battery = Math.round(((v - 3.0) / (4.2 - 3.0)) * 100);
+    }
+    return {
+      id: d.device_uid || 'DVC-UNKNOWN',
+      name: `Sensor Device ${(d.device_uid || '').slice(-4)}`,
+      type: 'Water Quality',
+      pond: site.name,
+      status: d.status === 'active' ? 'Online' : 'Offline',
+      signal: d.latest_reading?.signal_dbm != null ? `${d.latest_reading.signal_dbm} dBm` : 'N/A',
+      battery: `${battery}%`,
+      last: formatSeen(d.latest_reading?.collected_at),
+      firmware: d.firmware_version || 'v2',
+      serial: d.imei || 'N/A',
+      mac: d.sim_number || 'N/A',
+      installedOn: new Date(d.created_at).toLocaleDateString(),
+    };
+  });
+
+  const [selectedDevId, setSelectedDevId] = useState(mappedDevices[0]?.id || '');
+  const selectedDev = mappedDevices.find(d => d.id === selectedDevId) || mappedDevices[0];
 
   return (
     <div className="mt-4 grid grid-cols-[1fr_320px] gap-4">
@@ -641,137 +774,192 @@ function DevicesTab() {
             <tr>{['Device ID', 'Device Name', 'Type', 'Pond', 'Status', 'Signal', 'Battery', 'Last Data'].map((h) => <th key={h} className="px-2 py-3 font-medium">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-[#0d3660]/50">
-            {Object.values(devicesData).map((device) => (
-              <tr
-                key={device.id}
-                onClick={() => setSelectedDevId(device.id)}
-                className={`cursor-pointer transition hover:bg-[#071f35]/50 ${
-                  selectedDevId === device.id ? 'bg-[#06b6d4]/10' : ''
-                }`}
-              >
-                <td className="px-2 py-3 text-white font-semibold">{device.id}</td>
-                <td className="text-white font-medium">{device.name}</td>
-                <td><span className="rounded px-2 py-1 text-[10px] font-bold bg-sky-500/20 text-sky-300">{device.type}</span></td>
-                <td className="text-white font-medium">{device.pond}</td>
-                <td className="text-emerald-400 font-semibold">• {device.status}</td>
-                <td className="text-emerald-400 font-bold">{device.signal}</td>
-                <td className="text-white font-medium">{device.battery}</td>
-                <td className="text-slate-350">{device.last}</td>
+            {mappedDevices.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-slate-400">No connected devices found for this site.</td>
               </tr>
-            ))}
+            ) : (
+              mappedDevices.map((device) => (
+                <tr
+                  key={device.id}
+                  onClick={() => setSelectedDevId(device.id)}
+                  className={`cursor-pointer transition hover:bg-[#071f35]/50 ${
+                    selectedDevId === device.id ? 'bg-[#06b6d4]/10' : ''
+                  }`}
+                >
+                  <td className="px-2 py-3 text-white font-semibold">{device.id}</td>
+                  <td className="text-white font-medium">{device.name}</td>
+                  <td><span className="rounded px-2 py-1 text-[10px] font-bold bg-sky-500/20 text-sky-300">{device.type}</span></td>
+                  <td className="text-white font-medium">{device.pond}</td>
+                  <td className={`${device.status === 'Online' ? 'text-emerald-400' : 'text-red-400'} font-semibold`}>• {device.status}</td>
+                  <td className="text-slate-300 font-bold">{device.signal}</td>
+                  <td className="text-white font-medium">{device.battery}</td>
+                  <td className="text-slate-350">{device.last}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </Panel>
 
       <Panel title="Device Details">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sky-500/15"><Cpu className="h-9 w-9 text-sky-400" /></div>
-          <div>
-            <p className={`text-xs font-bold ${selectedDev.status === 'Online' ? 'text-emerald-400' : 'text-orange-400'}`}>• {selectedDev.status}</p>
-            <h3 className="font-bold text-white text-sm sm:text-base leading-tight">{selectedDev.name}</h3>
-            <p className="mt-1.5 inline-block rounded bg-blue-600/30 px-2 py-0.5 text-xs text-sky-300 font-mono">{selectedDev.id}</p>
-          </div>
-        </div>
-        {[
-          ['Device Type', selectedDev.type],
-          ['Firmware Version', selectedDev.firmware],
-          ['Serial Number', selectedDev.serial],
-          ['MAC Address', selectedDev.mac],
-          ['Installed On', selectedDev.installedOn],
-        ].map(([label, value]) => <InfoLine key={label} label={label} value={value} />)}
+        {selectedDev ? (
+          <>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sky-500/15"><Cpu className="h-9 w-9 text-sky-400" /></div>
+              <div>
+                <p className={`text-xs font-bold ${selectedDev.status === 'Online' ? 'text-emerald-400' : 'text-red-400'}`}>• {selectedDev.status}</p>
+                <h3 className="font-bold text-white text-sm sm:text-base leading-tight">{selectedDev.name}</h3>
+                <p className="mt-1.5 inline-block rounded bg-blue-600/30 px-2 py-0.5 text-xs text-sky-300 font-mono">{selectedDev.id}</p>
+              </div>
+            </div>
+            {[
+              ['Device Type', selectedDev.type],
+              ['Firmware Version', selectedDev.firmware],
+              ['Serial Number (IMEI)', selectedDev.serial],
+              ['SIM Number', selectedDev.mac],
+              ['Installed On', selectedDev.installedOn],
+            ].map(([label, value]) => <InfoLine key={label} label={label} value={value} />)}
+          </>
+        ) : (
+          <p className="text-sm text-slate-400">Select a device from the list to view details.</p>
+        )}
       </Panel>
     </div>
   );
 }
 
-function PondsTab() {
-  const [selectedPondName, setSelectedPondName] = useState('Pond 01');
-  const selectedPond = pondsData[selectedPondName] || pondsData['Pond 01'];
+function PondsTab({
+  site,
+  deviceList,
+  readingsList,
+  assignmentsList,
+  agentsList,
+}: {
+  site: Site;
+  deviceList: any[];
+  readingsList: any[];
+  assignmentsList: any[];
+  agentsList: any[];
+}) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteDevices = deviceList.filter((d: any) => d.site_id === dbSiteId);
+  const siteAgents = assignmentsList.filter((aa: any) => aa.site_id === dbSiteId);
+  const assignedAgentIds = siteAgents.map((sa) => Number(sa.agent_user_id));
+  const siteAgentsFull = agentsList.filter((a) => assignedAgentIds.includes(Number(a.id)));
+  const agentNames = siteAgentsFull.map((a) => a.full_name || a.email).join(', ') || 'Unassigned';
+
+  const pond = {
+    name: site.name,
+    status: site.status,
+    purpose: 'Water Quality Monitoring',
+    devicesCount: `${siteDevices.length} Connected Devices`,
+    score: String(site.score),
+    details: `${site.type} • ${site.area} • 6.5 ft depth`,
+    fishCount: '15,000 (Estimated)',
+    feedToday: '45 kg',
+    aerators: '3 Online',
+    lastInspection: 'Just now',
+    assignedAgent: agentNames,
+  };
 
   return (
     <div className="mt-4 grid grid-cols-[1fr_280px] gap-4">
       <Panel title="Ponds List">
         <div className="grid grid-cols-3 gap-3">
-          {Object.values(pondsData).map((pond) => (
-            <button
-              key={pond.name}
-              onClick={() => setSelectedPondName(pond.name)}
-              className={`rounded-lg border p-4 text-left transition hover:border-cyan-400 cursor-pointer ${
-                selectedPondName === pond.name
-                  ? 'border-sky-500 bg-sky-500/10'
-                  : 'border-[#0d3660] bg-[#031426]/80'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <Waves className="h-6 w-6 text-cyan-300" />
-                <span className="rounded px-2 py-1 text-[10px] font-bold bg-emerald-500/20 text-emerald-300">{pond.status}</span>
-              </div>
-              <h3 className="mt-4 font-bold text-white">{pond.name}</h3>
-              <p className="mt-1 text-xs text-slate-300">{pond.purpose}</p>
-              <p className="mt-3 text-2xl font-bold text-white">{pond.score}<span className="text-xs font-normal text-slate-400"> score</span></p>
-            </button>
-          ))}
+          <button
+            className="rounded-lg border p-4 text-left border-sky-500 bg-sky-500/10"
+          >
+            <div className="flex items-center justify-between">
+              <Waves className="h-6 w-6 text-cyan-300" />
+              <span className={`rounded px-2 py-1 text-[10px] font-bold ${pond.status === 'Healthy' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{pond.status}</span>
+            </div>
+            <h3 className="mt-4 font-bold text-white">{pond.name}</h3>
+            <p className="mt-1 text-xs text-slate-300">{pond.purpose}</p>
+            <p className="mt-3 text-2xl font-bold text-white">{pond.score}<span className="text-xs font-normal text-slate-400"> score</span></p>
+          </button>
         </div>
       </Panel>
       <Panel title="Selected Pond">
-        <h3 className="text-xl font-bold text-white">{selectedPond.name}</h3>
-        <p className="mt-2 text-sm text-slate-300">{selectedPond.details}</p>
+        <h3 className="text-xl font-bold text-white">{pond.name}</h3>
+        <p className="mt-2 text-sm text-slate-300">{pond.details}</p>
         {[
-          ['Fish Count', selectedPond.fishCount],
-          ['Feed Today', selectedPond.feedToday],
-          ['Aerators', selectedPond.aerators],
-          ['Last Inspection', selectedPond.lastInspection],
-          ['Assigned Agent', selectedPond.assignedAgent],
+          ['Fish Count', pond.fishCount],
+          ['Feed Today', pond.feedToday],
+          ['Aerators', pond.aerators],
+          ['Last Inspection', pond.lastInspection],
+          ['Assigned Agent', pond.assignedAgent],
         ].map(([label, value]) => <InfoLine key={label} label={label} value={value} />)}
       </Panel>
     </div>
   );
 }
 
-function AgentsTab({ agentsList }: { agentsList: any[] }) {
-  const defaultAgents = [
-    { id: 'AGT-001', full_name: 'Ravi Kumar', email: 'agent@gmail.com', phone: '+91 9988776655' },
-    { id: 'AGT-002', full_name: 'Meera Iyer', email: 'meera@gmail.com', phone: '+91 9988776656' },
-  ];
-
-  const list = agentsList.length > 0 ? agentsList : defaultAgents;
+function AgentsTab({
+  site,
+  agentsList,
+  assignmentsList,
+}: {
+  site: Site;
+  agentsList: any[];
+  assignmentsList: any[];
+}) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteAssignments = assignmentsList.filter((aa: any) => aa.site_id === dbSiteId);
+  const assignedAgentIds = siteAssignments.map((aa) => Number(aa.agent_user_id));
+  const siteAgents = agentsList.filter((a) => assignedAgentIds.includes(Number(a.id)));
 
   return (
     <div className="mt-4 grid grid-cols-[1fr_280px] gap-4">
       <Panel title="Active Agents">
         <div className="divide-y divide-[#0d3660]/50">
-          {list.map((agent) => (
-            <div key={agent.id} className="grid grid-cols-[1.5fr_1.5fr_1fr] items-center py-3 text-sm">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/15"><UserRound className="h-5 w-5 text-cyan-300" /></div>
-                <div>
-                  <p className="font-bold text-white">{agent.full_name}</p>
-                  <p className="text-xs text-slate-400">{agent.email}</p>
+          {siteAgents.length === 0 ? (
+            <p className="py-6 text-sm text-slate-400">No agents assigned to this site.</p>
+          ) : (
+            siteAgents.map((agent) => (
+              <div key={agent.id} className="grid grid-cols-[1.5fr_1.5fr_1fr] items-center py-3 text-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/15"><UserRound className="h-5 w-5 text-cyan-300" /></div>
+                  <div>
+                    <p className="font-bold text-white">{agent.full_name || 'Unnamed Agent'}</p>
+                    <p className="text-xs text-slate-400">{agent.email}</p>
+                  </div>
                 </div>
+                <span className="text-slate-300">{agent.phone || 'N/A'}</span>
+                <span className="text-emerald-400 font-semibold">• Active</span>
               </div>
-              <span className="text-slate-300">{agent.phone}</span>
-              <span className="text-emerald-400 font-semibold">• Active</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </Panel>
       <Panel title="Agent Coverage">
-        <ScoreCircle score={100} label="Coverage" />
+        <ScoreCircle score={siteAgents.length > 0 ? 100 : 0} label="Coverage" />
         {[
-          ['Total Agents', String(list.length)],
-          ['Status', 'Online'],
+          ['Total Agents', String(siteAgents.length)],
+          ['Status', siteAgents.length > 0 ? 'Online' : 'Offline'],
         ].map(([label, value]) => <InfoLine key={label} label={label} value={value} />)}
       </Panel>
     </div>
   );
 }
 
-function WaterQualityTab({ site }: { site: Site }) {
+function WaterQualityTab({ site, readingsList }: { site: Site; readingsList: any[] }) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteReadings = readingsList.filter((r: any) => r.site_id === dbSiteId);
+  const latest = siteReadings[0];
+
+  const getDOValue = (temp: number) => (8.5 - (temp - 20) * 0.15).toFixed(1);
+  const doVal = latest ? `${getDOValue(latest.temperature_c)} mg/L` : 'N/A';
+  const phVal = latest ? String(latest.ph.toFixed(1)) : 'N/A';
+  const tempVal = latest ? `${latest.temperature_c.toFixed(1)} °C` : 'N/A';
+  const turbVal = latest ? `${latest.turbidity.toFixed(1)} NTU` : 'N/A';
+
   const metrics = [
     ['Water Quality Score', String(site.score), site.water],
-    ['Dissolved Oxygen', '6.8 mg/L', 'Good'],
-    ['pH Level', '7.2', 'Normal'],
-    ['Temperature', '23.5 °C', 'Normal'],
+    ['Dissolved Oxygen', doVal, latest ? 'Good' : 'No Data'],
+    ['pH Level', phVal, latest ? 'Normal' : 'No Data'],
+    ['Temperature', tempVal, latest ? 'Normal' : 'No Data'],
+    ['Turbidity', turbVal, latest ? 'Clear' : 'No Data'],
   ];
 
   return (
@@ -782,7 +970,7 @@ function WaterQualityTab({ site }: { site: Site }) {
             <div key={label} className="rounded-lg border border-[#0d3660] p-4 bg-[#031426]/50">
               <p className="text-xs text-slate-300">{label}</p>
               <p className="mt-4 text-2xl font-bold text-white">{value}</p>
-              <p className="mt-2 text-sm text-emerald-400 font-semibold">{status}</p>
+              <p className={`mt-2 text-sm ${status === 'Warning' || status === 'Critical' ? 'text-amber-400 font-semibold' : 'text-emerald-400 font-semibold'}`}>{status}</p>
             </div>
           ))}
         </div>
@@ -797,47 +985,60 @@ function WaterQualityTab({ site }: { site: Site }) {
   );
 }
 
-function AlertsTab() {
-  const alerts = [
-    ['High Turbidity', 'Pond 03', 'Warning', 'May 18, 10:12 AM'],
-    ['Aerator Inspection Due', 'Pond 05', 'Info', 'May 18, 09:40 AM'],
-  ];
+function AlertsTab({ site, alertsList }: { site: Site; alertsList: any[] }) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteAlerts = alertsList.filter((a: any) => a.site_id === dbSiteId);
 
   return (
     <div className="mt-4">
       <Panel title="Site Alerts">
         <div className="divide-y divide-[#0d3660]/50">
-          {alerts.map(([title, target, severity, time]) => (
-            <div key={`${title}-${target}`} className="grid grid-cols-[1fr_160px_120px_180px_40px] items-center py-4 text-sm hover:bg-[#071f35]/25 px-2 rounded transition">
-              <div className="flex items-center gap-3"><AlertTriangle className="h-5 w-5 text-amber-400" /><span className="font-bold text-white">{title}</span></div>
-              <span className="text-slate-300">{target}</span>
-              <span className="text-slate-350">{severity}</span>
-              <span className="text-slate-400 text-xs">{time}</span>
-              <ChevronRight className="h-4 w-4 text-white" />
-            </div>
-          ))}
+          {siteAlerts.length === 0 ? (
+            <p className="py-6 text-sm text-slate-450 text-center">No active alerts found for this site.</p>
+          ) : (
+            siteAlerts.map((alert) => (
+              <div key={alert.id} className="grid grid-cols-[1fr_160px_120px_180px_40px] items-center py-4 text-sm hover:bg-[#071f35]/25 px-2 rounded transition">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className={`h-5 w-5 ${alert.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}`} />
+                  <span className="font-bold text-white">{alert.title}</span>
+                </div>
+                <span className="text-slate-300">{site.name}</span>
+                <span className="text-slate-350 capitalize">{alert.severity}</span>
+                <span className="text-slate-400 text-xs">{new Date(alert.created_at).toLocaleString()}</span>
+                <ChevronRight className="h-4 w-4 text-white" />
+              </div>
+            ))
+          )}
         </div>
       </Panel>
     </div>
   );
 }
 
-function HistoryTab() {
-  const history = [
-    ['May 18, 2024', 'Water quality inspection completed', 'Rahul Verma'],
-  ];
+function HistoryTab({ site, readingsList }: { site: Site; readingsList: any[] }) {
+  const dbSiteId = Number(site.id.replace('SITE-', ''));
+  const siteReadings = readingsList.filter((r: any) => r.site_id === dbSiteId);
 
   return (
     <div className="mt-4">
       <Panel title="Site History">
         <div className="divide-y divide-[#0d3660]/50">
-          {history.map(([date, action, by]) => (
-            <div key={`${date}-${action}`} className="grid grid-cols-[150px_1fr_180px] py-4 text-sm">
-              <span className="flex items-center gap-2 text-slate-300"><CalendarDays className="h-4 w-4 text-cyan-300" />{date}</span>
-              <span className="font-semibold text-white">{action}</span>
-              <span className="text-slate-400">{by}</span>
-            </div>
-          ))}
+          {siteReadings.length === 0 ? (
+            <p className="py-6 text-sm text-slate-450 text-center">No historical entries found for this site.</p>
+          ) : (
+            siteReadings.slice(0, 10).map((reading) => (
+              <div key={reading.id} className="grid grid-cols-[150px_1fr_180px] py-4 text-sm">
+                <span className="flex items-center gap-2 text-slate-300">
+                  <CalendarDays className="h-4 w-4 text-cyan-300" />
+                  {new Date(reading.collected_at).toLocaleDateString()}
+                </span>
+                <span className="font-semibold text-white">
+                  Telemetry reading logged (pH: {reading.ph.toFixed(1)}, Temp: {reading.temperature_c.toFixed(1)}°C, Turb: {reading.turbidity.toFixed(1)} NTU)
+                </span>
+                <span className="text-slate-400">Automated Sensor</span>
+              </div>
+            ))
+          )}
         </div>
       </Panel>
     </div>

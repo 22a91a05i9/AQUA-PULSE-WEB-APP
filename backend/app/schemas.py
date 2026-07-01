@@ -155,6 +155,8 @@ class SiteOut(BaseModel):
     species_id: int
     custom_thresholds: dict | None = None
     created_at: datetime
+    devices_count: int = 0
+    agents_count: int = 0
 
 
 class DeviceOut(BaseModel):
@@ -181,7 +183,7 @@ class ReadingOut(BaseModel):
     site_id: int | None = None
     temperature_c: float
     ph: float
-    turbidity: float
+    turbidity: float | None = None
     source: str
     collected_at: datetime
     received_at: datetime

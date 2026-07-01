@@ -75,6 +75,14 @@ class Site(Base):
     farm_type: Mapped["FarmType"] = relationship("FarmType")
     species: Mapped["Species"] = relationship("Species")
 
+    @property
+    def devices_count(self) -> int:
+        return len(self.devices)
+
+    @property
+    def agents_count(self) -> int:
+        return len([a for a in self.agent_assignments if a.is_active])
+
 
 class SiteAgentAssignment(Base):
     __tablename__ = "site_agent_assignments"

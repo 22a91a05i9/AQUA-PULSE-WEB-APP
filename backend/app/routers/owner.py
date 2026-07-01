@@ -30,6 +30,10 @@ def owner_overview(
     devices = db.scalars(select(Device).where(Device.owner_user_id == current_user.id).order_by(Device.created_at.desc())).all()
     sites = db.scalars(select(Site).where(Site.owner_user_id == current_user.id).order_by(Site.created_at.desc())).all()
     agents = db.scalars(select(User).where(User.owner_user_id == current_user.id, User.role == "agent")).all()
+    agent_assignments = db.scalars(
+        select(SiteAgentAssignment)
+        .where(SiteAgentAssignment.assigned_by_owner_id == current_user.id, SiteAgentAssignment.is_active.is_(True))
+    ).all()
     alerts = db.scalars(
         select(Alert).where(Alert.recipient_user_id == current_user.id).order_by(Alert.created_at.desc()).limit(10)
     ).all()
@@ -84,6 +88,7 @@ def owner_overview(
         "alerts": [
             {
                 "id": item.id,
+                "site_id": item.site_id,
                 "metric": item.metric,
                 "severity": item.severity,
                 "title": item.title,
@@ -104,6 +109,14 @@ def owner_overview(
                 "collected_at": item.collected_at,
             }
             for item in readings
+        ],
+        "agent_assignments": [
+            {
+                "id": item.id,
+                "site_id": item.site_id,
+                "agent_user_id": item.agent_user_id,
+            }
+            for item in agent_assignments
         ],
     }
 
