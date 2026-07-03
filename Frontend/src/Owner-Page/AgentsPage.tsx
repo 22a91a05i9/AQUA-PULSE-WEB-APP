@@ -88,15 +88,37 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
           const res = await apiRequest<any[]>('/owner/agents', {
             token: session.token,
           });
-          const mappedAgents: Agent[] = res.map((a: any) => ({
-            id: String(a.id),
-            name: a.full_name || 'Unnamed Agent',
-            site: a.farm_type_id ? `Site Type #${a.farm_type_id}` : 'General',
-            area: 'Area 1',
-            status: a.is_active ? 'Online' : 'Offline',
-            lastSeen: 'Just now',
-            score: 95,
-          }));
+          const mappedAgents: Agent[] = res.map((a: any) => {
+            let lastSeen = 'Never';
+            if (a.last_portal_access) {
+              const lastAccessTime = new Date(a.last_portal_access);
+              const now = new Date();
+              const diffMs = now.getTime() - lastAccessTime.getTime();
+              const diffMins = Math.floor(diffMs / 60000);
+              const diffHours = Math.floor(diffMs / 3600000);
+              const diffDays = Math.floor(diffMs / 86400000);
+
+              if (diffMins < 1) {
+                lastSeen = 'Just now';
+              } else if (diffMins < 60) {
+                lastSeen = `${diffMins} min ago`;
+              } else if (diffHours < 24) {
+                lastSeen = `${diffHours}h ago`;
+              } else {
+                lastSeen = `${diffDays}d ago`;
+              }
+            }
+
+            return {
+              id: String(a.id),
+              name: a.full_name || 'Unnamed Agent',
+              site: a.farm_type_id ? `Site Type #${a.farm_type_id}` : 'General',
+              area: 'Area 1',
+              status: a.is_active ? 'Online' : 'Offline',
+              lastSeen,
+              score: 95,
+            };
+          });
           setAgentsList(mappedAgents);
         }
       } catch (err) {

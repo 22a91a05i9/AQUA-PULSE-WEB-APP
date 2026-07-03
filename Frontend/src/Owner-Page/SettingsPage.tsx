@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
-  Briefcase,
   ChevronRight,
-  Globe2,
+  Clock,
   Info,
+  Languages,
   LockKeyhole,
   Mail,
-  MoreVertical,
+  Palette,
   Phone,
-  ShieldCheck,
+  Ruler,
+  UserCog,
   UserPlus,
   UserRound,
 } from 'lucide-react';
@@ -19,57 +20,29 @@ import { getAuthSession } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
 import { RowActionMenu } from '../lib/tableActions';
 
+type SettingsPanel = 'profile' | 'units' | 'timezone' | 'password' | null;
+
+const SENSOR_UNITS = [
+  { label: 'Temperature', unit: 'deg C' },
+  { label: 'pH', unit: 'pH scale' },
+  { label: 'Turbidity', unit: 'NTU' },
+  { label: 'Ammonia', unit: 'mg/L' },
+  { label: 'Dissolved Oxygen', unit: 'mg/L' },
+  { label: 'Nitrate', unit: 'mg/L' },
+  { label: 'Salinity', unit: 'ppt' },
+  { label: 'Conductivity', unit: 'uS/cm' },
+];
+
 export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const session = getAuthSession();
   const [ownerData, setOwnerData] = useState<any>(session?.user || null);
   const [agentsList, setAgentsList] = useState<any[]>([]);
-
-  const handleDeleteAgent = async (agent: any) => {
-    if (!window.confirm(`Are you sure you want to delete agent "${agent.full_name || agent.name}"?`)) {
-      return;
-    }
-    try {
-      const session = getAuthSession();
-      if (!session) return;
-      await apiRequest(`/owner/agents/${agent.id}`, {
-        method: 'DELETE',
-        token: session.token,
-      });
-      setAgentsList((prev) => prev.filter((a) => a.id !== agent.id));
-      setMessage(`Agent "${agent.full_name || agent.name}" deleted successfully.`);
-    } catch (err: any) {
-      console.error('Failed to delete agent:', err);
-      alert(err?.detail || err?.message || 'Failed to delete agent.');
-    }
-  };
-
-  const handleEditAgent = async (agent: any) => {
-    const newName = window.prompt(`Edit name for agent:`, agent.full_name || agent.name);
-    if (newName === null) return;
-    const newPhone = window.prompt(`Edit phone for agent:`, agent.phone || '');
-    if (newPhone === null) return;
-
-    try {
-      const session = getAuthSession();
-      if (!session) return;
-      const updated = await apiRequest<any>(`/owner/agents/${agent.id}`, {
-        method: 'PUT',
-        token: session.token,
-        body: {
-          full_name: newName.trim(),
-          phone: newPhone.trim(),
-        },
-      });
-      setAgentsList((prev) => prev.map((a) => (a.id === agent.id ? updated : a)));
-      setMessage(`Agent profile updated successfully.`);
-    } catch (err: any) {
-      console.error('Failed to update agent:', err);
-      alert(err?.detail || err?.message || 'Failed to update agent.');
-    }
-  };
+  const [message, setMessage] = useState('');
+  const [openPanel, setOpenPanel] = useState<SettingsPanel>(null);
+  const detectedTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata', []);
+  const [selectedTimeZone, setSelectedTimeZone] = useState(detectedTimeZone);
   const { theme, changeTheme } = useTheme();
   const { t, lang, changeLanguage } = useTranslation();
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     async function loadSettingsData() {
@@ -93,10 +66,67 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
     loadSettingsData();
   }, []);
 
+  const handleDeleteAgent = async (agent: any) => {
+    if (!window.confirm(`Are you sure you want to delete agent "${agent.full_name || agent.name}"?`)) {
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      await apiRequest(`/owner/agents/${agent.id}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      setAgentsList((prev) => prev.filter((a) => a.id !== agent.id));
+      setMessage(`Agent "${agent.full_name || agent.name}" deleted successfully.`);
+    } catch (err: any) {
+      console.error('Failed to delete agent:', err);
+      alert(err?.detail || err?.message || 'Failed to delete agent.');
+    }
+  };
+
+  const handleEditAgent = async (agent: any) => {
+    const newName = window.prompt('Edit name for agent:', agent.full_name || agent.name);
+    if (newName === null) return;
+    const newPhone = window.prompt('Edit phone for agent:', agent.phone || '');
+    if (newPhone === null) return;
+
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>(`/owner/agents/${agent.id}`, {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          full_name: newName.trim(),
+          phone: newPhone.trim(),
+        },
+      });
+      setAgentsList((prev) => prev.map((a) => (a.id === agent.id ? updated : a)));
+      setMessage('Agent profile updated successfully.');
+    } catch (err: any) {
+      console.error('Failed to update agent:', err);
+      alert(err?.detail || err?.message || 'Failed to update agent.');
+    }
+  };
+
   const ownerName = ownerData?.full_name || ownerData?.name || 'Owner User';
   const ownerEmail = ownerData?.email || '';
   const ownerPhone = ownerData?.phone || 'No phone registered';
   const ownerRole = ownerData?.role ? ownerData.role.charAt(0).toUpperCase() + ownerData.role.slice(1) : 'Owner';
+  const timeZoneOptions = [
+    detectedTimeZone,
+    'Asia/Kolkata',
+    'Asia/Dubai',
+    'Asia/Singapore',
+    'Europe/London',
+    'America/New_York',
+    'America/Los_Angeles',
+  ].filter((zone, index, zones) => zones.indexOf(zone) === index);
+
+  const togglePanel = (panel: Exclude<SettingsPanel, null>) => {
+    setOpenPanel((current) => (current === panel ? null : panel));
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -105,7 +135,7 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
           {t('My Account')} <UserRound className="h-4 w-4 text-cyan-300" />
         </h2>
         <button
-          onClick={() => setMessage('Profile editor opened.')}
+          onClick={() => togglePanel('profile')}
           className="flex w-full items-center gap-5 rounded-lg p-1 text-left transition hover:bg-[#071f35]/50"
         >
           <img className="h-16 w-16 rounded-full" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${ownerName}&backgroundColor=0a2a47`} alt={ownerName} />
@@ -119,29 +149,40 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
               <span className="flex items-center gap-2"><Phone className="h-4 w-4" /> {ownerPhone}</span>
             </div>
           </div>
-          <ChevronRight className="h-6 w-6 text-slate-300" />
+          <ChevronRight className={`h-6 w-6 text-slate-300 transition ${openPanel === 'profile' ? 'rotate-90' : ''}`} />
         </button>
+        {openPanel === 'profile' && (
+          <div className="mt-5 rounded-lg border border-[#0d3660] bg-[#031528]/60 p-5">
+            <div className="mb-4 flex items-center gap-2 text-sm font-bold uppercase text-cyan-200">
+              <UserCog className="h-4 w-4" />
+              Edit Profile
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Full Name" value={ownerName} />
+              <Field label="Role" value={ownerRole} />
+              <Field label="Email" value={ownerEmail || 'No email registered'} />
+              <Field label="Phone" value={ownerPhone} />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button onClick={() => setMessage('Profile edit form is ready to connect.')} className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700">
+                Save Profile
+              </button>
+              <p className="text-sm text-slate-400">Connect this form to the owner profile API when available.</p>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="glass rounded-xl p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase text-white">{t('My Account Team')}</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setMessage('Invite user flow opened.')}
-              className="flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-300/10"
-            >
-              <UserPlus className="h-4 w-4" />
-              {t('Invite User')}
-            </button>
-            <button
-              onClick={onAddAgent}
-              className="flex h-11 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-700 px-4 text-sm font-bold text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] transition hover:brightness-110"
-            >
-              <UserPlus className="h-4 w-4" />
-              {t('Add Agent')}
-            </button>
-          </div>
+          <button
+            onClick={onAddAgent}
+            className="flex h-11 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-700 px-4 text-sm font-bold text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] transition hover:brightness-110"
+          >
+            <UserPlus className="h-4 w-4" />
+            {t('Add Agent')}
+          </button>
         </div>
         <div className="divide-y divide-[#0d3660]/70">
           {agentsList.map((member) => (
@@ -169,9 +210,9 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
 
       <section className="glass rounded-xl p-5">
         <h2 className="mb-3 text-sm font-bold uppercase text-white">{t('Preferences')}</h2>
-        <SettingRow icon={Briefcase} title={t('Theme')} desc="Choose your application theme">
+        <SettingRow icon={Palette} title={t('Theme')} desc="Choose your application theme">
           <div className="flex rounded-lg border border-[#0d3660] p-1">
-            {(['Light', 'Dark', 'System'] as const).map((item) => (
+            {(['Light', 'Dark'] as const).map((item) => (
               <button
                 key={item}
                 onClick={() => changeTheme(item)}
@@ -182,14 +223,32 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
             ))}
           </div>
         </SettingRow>
-        <SettingRow icon={Briefcase} title={t('Units')} desc="Select measurement units" value="Metric (deg C, mg/L)" />
-        <SettingRow icon={Globe2} title={t('Language')} desc="Select your preferred language">
+        <SettingRow
+          icon={Ruler}
+          title={t('Units')}
+          desc="Select measurement units"
+          value="Metric (deg C, mg/L)"
+          expanded={openPanel === 'units'}
+          onClick={() => togglePanel('units')}
+        />
+        {openPanel === 'units' && (
+          <div className="border-b border-[#0d3660]/70 px-10 pb-5">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              {SENSOR_UNITS.map((sensor) => (
+                <div key={sensor.label} className="rounded-lg border border-[#0d3660] bg-[#031528]/60 p-3">
+                  <p className="text-sm font-semibold text-white">{sensor.label}</p>
+                  <p className="text-sm text-cyan-200">{sensor.unit}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <SettingRow icon={Languages} title={t('Language')} desc="Select your preferred language">
           <div className="flex rounded-lg border border-[#0d3660] p-1">
             {([
               { code: 'en', name: 'English' },
-              { code: 'es', name: 'Español' },
-              { code: 'fr', name: 'Français' },
-              { code: 'te', name: 'తెలుగు' }
+              { code: 'te', name: 'తెలుగు' },
+              { code: 'hi', name: 'हिंदी' },
             ] as const).map((item) => (
               <button
                 key={item.code}
@@ -201,13 +260,54 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
             ))}
           </div>
         </SettingRow>
-        <SettingRow icon={Globe2} title={t('Time Zone')} desc="Select your current time zone" value="(GMT+05:30) Asia/Kolkata" />
+        <SettingRow
+          icon={Clock}
+          title={t('Time Zone')}
+          desc="Select your current time zone"
+          value={selectedTimeZone}
+          expanded={openPanel === 'timezone'}
+          onClick={() => togglePanel('timezone')}
+        />
+        {openPanel === 'timezone' && (
+          <div className="border-b border-[#0d3660]/70 px-10 pb-5">
+            <div className="rounded-lg border border-[#0d3660] bg-[#031528]/60 p-4">
+              <p className="text-sm text-slate-300">Automatically detected</p>
+              <p className="mt-1 font-semibold text-white">{detectedTimeZone}</p>
+              <select
+                value={selectedTimeZone}
+                onChange={(event) => setSelectedTimeZone(event.target.value)}
+                className="mt-4 h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white outline-none md:w-80"
+              >
+                {timeZoneOptions.map((zone) => (
+                  <option key={zone} value={zone}>{zone}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="glass rounded-xl p-5">
         <h2 className="mb-3 text-sm font-bold uppercase text-white">{t('Account & Security')}</h2>
-        <SettingRow icon={LockKeyhole} title={t('Change Password')} desc="Update your account password" />
-        <SettingRow icon={ShieldCheck} title={t('Two-Factor Authentication')} desc="Add an extra layer of security" />
+        <SettingRow
+          icon={LockKeyhole}
+          title={t('Change Password')}
+          desc="Update your account password"
+          expanded={openPanel === 'password'}
+          onClick={() => togglePanel('password')}
+        />
+        {openPanel === 'password' && (
+          <div className="px-10 pb-5">
+            <div className="grid gap-4 rounded-lg border border-[#0d3660] bg-[#031528]/60 p-5 md:grid-cols-3">
+              <PasswordField label="Current Password" />
+              <PasswordField label="New Password" />
+              <PasswordField label="Confirm Password" />
+              <button onClick={() => setMessage('Password change form is ready to connect.')} className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 md:w-fit">
+                Update Password
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="glass rounded-xl p-5">
@@ -220,29 +320,64 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
   );
 }
 
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <label className="space-y-2 text-sm text-slate-300">
+      {label}
+      <input defaultValue={value} className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-3 text-white outline-none focus:border-cyan-400" />
+    </label>
+  );
+}
+
+function PasswordField({ label }: { label: string }) {
+  return (
+    <label className="space-y-2 text-sm text-slate-300">
+      {label}
+      <input type="password" className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-3 text-white outline-none" />
+    </label>
+  );
+}
+
 function SettingRow({
   icon: Icon,
   title,
   desc,
   value,
   children,
+  expanded,
+  onClick,
 }: {
   icon: LucideIcon;
   title: string;
   desc?: string;
   value?: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
+  expanded?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="flex w-full items-center gap-4 border-b border-[#0d3660]/70 py-4 text-left last:border-0">
+  const content = (
+    <>
       <Icon className="h-6 w-6 text-cyan-300" />
       <div className="flex-1">
         <p className="font-semibold text-white">{title}</p>
         {desc && <p className="text-sm text-slate-300">{desc}</p>}
       </div>
       {children || <span className="text-sm text-slate-300">{value}</span>}
-      {!children && <ChevronRight className="h-5 w-5 text-slate-300" />}
+      {!children && <ChevronRight className={`h-5 w-5 text-slate-300 transition ${expanded ? 'rotate-90' : ''}`} />}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button onClick={onClick} className="flex w-full items-center gap-4 border-b border-[#0d3660]/70 py-4 text-left last:border-0">
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex w-full items-center gap-4 border-b border-[#0d3660]/70 py-4 text-left last:border-0">
+      {content}
     </div>
   );
 }
-

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Bell,
@@ -12,66 +12,115 @@ import {
   Search,
   SendHorizontal,
 } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
+import { config } from '../lib/config';
 import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
+
+type ReportFormat = 'pdf' | 'excel';
+
+type ReportItem = {
+  id: number;
+  user_id: number;
+  generated_by_name?: string | null;
+  generated_by_role?: string | null;
+  title: string;
+  report_type: string;
+  scope: string;
+  format: string;
+  status: string;
+  parameters?: { row_count?: number } | null;
+  created_at: string;
+};
 
 const popularReports = [
   {
     name: 'Water Quality Report',
-    desc: 'Summary of water quality parameters and compliance.',
+    type: 'water_quality',
+    desc: 'Live monitoring readings with water quality parameters.',
     icon: LineChart,
     tone: 'text-sky-400 bg-sky-500/20',
   },
   {
     name: 'Device Status Report',
-    desc: 'Overview of device status, uptime and connectivity.',
+    type: 'device_status',
+    desc: 'Device page data with status, site, firmware and sensors.',
     icon: LineChart,
     tone: 'text-emerald-400 bg-emerald-500/20',
   },
   {
     name: 'Alert Summary Report',
-    desc: 'Summary of alerts triggered within the selected period.',
+    type: 'alert_summary',
+    desc: 'Alerts page data with severity, metric and status.',
     icon: Bell,
     tone: 'text-violet-300 bg-violet-500/20',
   },
   {
     name: 'Site Performance Report',
-    desc: 'Performance overview of sites and key metrics.',
+    type: 'site_performance',
+    desc: 'Sites page data with devices, agents, readings and alerts.',
     icon: BarChart3,
     tone: 'text-orange-400 bg-orange-500/20',
   },
   {
     name: 'Compliance Report',
-    desc: 'Regulatory compliance summary and violations.',
+    type: 'compliance',
+    desc: 'Analytics-style compliance summary from live readings.',
     icon: FileText,
     tone: 'text-cyan-300 bg-cyan-500/20',
   },
 ];
 
-const generatedReports = [
-  ['Water Quality Report - May 2024', 'Water Quality', 'All Sites', 'Rahul Verma', 'May 18, 2024 10:30 AM', 'PDF', 'Completed'],
-  ['Device Status Report - May 2024', 'Device Status', 'All Sites', 'Rahul Verma', 'May 18, 2024 09:15 AM', 'PDF', 'Completed'],
-  ['Alert Summary Report - May 2024', 'Alert Summary', 'All Sites', 'Rahul Verma', 'May 18, 2024 08:45 AM', 'Excel', 'Completed'],
-  ['Site Performance Report - Q2 2024', 'Site Performance', 'Region: North', 'Rahul Verma', 'May 17, 2024 05:20 PM', 'PDF', 'Completed'],
-  ['Compliance Report - April 2024', 'Compliance', 'All Sites', 'Rahul Verma', 'May 17, 2024 03:10 PM', 'PDF', 'Completed'],
-  ['Water Quality Report - April 2024', 'Water Quality', 'Pond 01', 'Rahul Verma', 'May 16, 2024 11:05 AM', 'Excel', 'Completed'],
-  ['Device Status Report - April 2024', 'Device Status', 'All Sites', 'Rahul Verma', 'May 16, 2024 09:30 AM', 'PDF', 'Failed'],
-  ['Alert Summary Report - April 2024', 'Alert Summary', 'Region: South', 'Rahul Verma', 'May 15, 2024 04:40 PM', 'Excel', 'Completed'],
-];
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  water_quality: 'Water Quality',
+  device_status: 'Device Status',
+  alert_summary: 'Alert Summary',
+  site_performance: 'Site Performance',
+  compliance: 'Compliance',
+};
 
 export default function ReportsPage() {
   const [search, setSearch] = useState('');
-  const [reports, setReports] = useState(generatedReports);
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState<string | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
+  const loadReports = async () => {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const data = await apiRequest<ReportItem[]>('/reports', { token: session.token });
+      setReports(data);
+    } catch (err) {
+      console.error('Failed to load reports:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadReports();
+  }, []);
+
   const filteredReports = useMemo(
     () => reports.filter((report) => {
-      const matchesSearch = rowMatchesSearch(report, search);
-      const matchesType = typeFilter === 'all' || report[1].toLowerCase().includes(typeFilter.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || report[6].toLowerCase() === statusFilter.toLowerCase();
+      const searchable = [
+        report.title,
+        REPORT_TYPE_LABELS[report.report_type] || report.report_type,
+        report.scope,
+        report.generated_by_name || '',
+        report.generated_by_role || '',
+        report.format,
+        report.status,
+      ];
+      const matchesSearch = rowMatchesSearch(searchable, search);
+      const matchesType = typeFilter === 'all' || report.report_type === typeFilter;
+      const matchesStatus = statusFilter === 'all' || report.status.toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesType && matchesStatus;
     }),
     [reports, search, typeFilter, statusFilter],
@@ -80,23 +129,77 @@ export default function ReportsPage() {
   const totalPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
   const paginatedReports = filteredReports.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const generateReport = async (report: (typeof popularReports)[number], format: ReportFormat) => {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      setGenerating(`${report.type}-${format}`);
+      const created = await apiRequest<ReportItem>('/reports', {
+        method: 'POST',
+        token: session.token,
+        body: {
+          title: `${report.name} - ${new Date().toLocaleString()}`,
+          report_type: report.type,
+          scope: 'All assigned data',
+          format,
+          parameters: { source_page: report.type },
+        },
+      });
+      setReports((current) => [created, ...current]);
+      setCurrentPage(1);
+    } catch (err) {
+      console.error('Failed to generate report:', err);
+      alert('Failed to generate report. Please try again.');
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const downloadReport = async (report: ReportItem) => {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const baseUrl = config.apiBaseUrl.replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/reports/${report.id}/download`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') || '';
+      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || `${report.title}.${report.format === 'excel' ? 'xls' : 'pdf'}`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download report:', err);
+      alert('Failed to download report.');
+    }
+  };
+
   const exportReports = () => {
     exportRowsToCsv(
       'aqua-pulse-owner-reports.csv',
-      filteredReports.map(([name, type, scope, by, generated, format, status]) => ({
-        Name: name,
-        Type: type,
-        Scope: scope,
-        GeneratedBy: by,
-        GeneratedOn: generated,
-        Format: format,
-        Status: status,
+      filteredReports.map((report) => ({
+        Name: report.title,
+        Type: REPORT_TYPE_LABELS[report.report_type] || report.report_type,
+        Scope: report.scope,
+        GeneratedBy: report.generated_by_name || 'Unknown',
+        Role: report.generated_by_role || 'Unknown',
+        GeneratedOn: new Date(report.created_at).toLocaleString(),
+        Format: report.format.toUpperCase(),
+        Rows: report.parameters?.row_count ?? 0,
+        Status: report.status,
       })),
     );
   };
 
-  const deleteReport = (name: string) => {
-    setReports((current) => current.filter((report) => report[0] !== name));
+  const deleteReport = (id: number) => {
+    setReports((current) => current.filter((report) => report.id !== id));
   };
 
   return (
@@ -122,10 +225,19 @@ export default function ReportsPage() {
                 </div>
                 <h3 className="text-sm font-bold text-white">{report.name}</h3>
                 <p className="mt-3 min-h-[48px] text-sm leading-6 text-slate-300">{report.desc}</p>
-                <button className={`mt-5 flex w-full items-center justify-between border-t border-[#0d3660]/70 pt-4 text-sm font-medium ${accent}`}>
-                  Generate Report
-                  <SendHorizontal className="h-4 w-4" />
-                </button>
+                <div className="mt-5 grid grid-cols-2 gap-2 border-t border-[#0d3660]/70 pt-4">
+                  {(['pdf', 'excel'] as const).map((format) => (
+                    <button
+                      key={format}
+                      onClick={() => generateReport(report, format)}
+                      disabled={generating === `${report.type}-${format}`}
+                      className={`flex h-9 items-center justify-center gap-2 rounded-md border border-[#0d3660] text-xs font-semibold uppercase transition hover:bg-[#071f35] disabled:opacity-60 ${accent}`}
+                    >
+                      <SendHorizontal className="h-3.5 w-3.5" />
+                      {generating === `${report.type}-${format}` ? 'Generating' : format}
+                    </button>
+                  ))}
+                </div>
               </article>
             );
           })}
@@ -142,28 +254,20 @@ export default function ReportsPage() {
             </div>
             {showAdvancedFilters && (
               <>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="h-10 rounded-md border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none"
-                >
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-10 rounded-md border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none">
                   <option value="all">All Types</option>
-                  <option value="summary">Summary Reports</option>
-                  <option value="quality">Quality Reports</option>
-                  <option value="device">Device Reports</option>
+                  {popularReports.map((report) => (
+                    <option key={report.type} value={report.type}>{report.name}</option>
+                  ))}
                 </select>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-10 rounded-md border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none"
-                >
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none">
                   <option value="all">All Status</option>
                   <option value="completed">Completed</option>
                   <option value="failed">Failed</option>
                 </select>
               </>
             )}
-            <button 
+            <button
               onClick={() => setShowAdvancedFilters(prev => !prev)}
               className={`flex h-10 items-center gap-2 rounded-md border px-5 text-sm font-semibold transition ${
                 showAdvancedFilters ? 'border-[#06b6d4] text-[#22d3ee] bg-[#06b6d4]/10' : 'border-[#0d3660] text-white hover:bg-[#071f35]'
@@ -178,7 +282,7 @@ export default function ReportsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-left text-sm">
+          <table className="w-full min-w-[1180px] text-left text-sm">
             <thead className="bg-[#071f35]/80 text-slate-300">
               <tr>
                 <th className="px-5 py-4 font-medium">Report Name</th>
@@ -187,36 +291,51 @@ export default function ReportsPage() {
                 <th className="font-medium">Generated By</th>
                 <th className="font-medium">Generated On</th>
                 <th className="font-medium">Format</th>
+                <th className="font-medium">Rows</th>
                 <th className="font-medium">Status</th>
                 <th className="pr-5 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#0d3660]/50">
-              {paginatedReports.map(([name, type, scope, by, generated, format, status]) => (
-                <tr key={name} className="transition hover:bg-[#071f35]/40">
-                  <td className="px-5 py-4 text-slate-200">{name}</td>
-                  <td className="text-slate-300">{type}</td>
-                  <td className="text-slate-300">{scope}</td>
-                  <td className="text-slate-300">{by}</td>
-                  <td className="text-slate-300">{generated}</td>
+              {loading && (
+                <tr>
+                  <td colSpan={9} className="px-5 py-8 text-center text-slate-400">Loading reports...</td>
+                </tr>
+              )}
+              {!loading && paginatedReports.map((report) => (
+                <tr key={report.id} className="transition hover:bg-[#071f35]/40">
+                  <td className="px-5 py-4 text-slate-200">{report.title}</td>
+                  <td className="text-slate-300">{REPORT_TYPE_LABELS[report.report_type] || report.report_type}</td>
+                  <td className="text-slate-300">{report.scope}</td>
                   <td className="text-slate-300">
-                    <span className={format === 'Excel' ? 'text-emerald-300' : 'text-red-300'}>{format === 'Excel' ? 'Excel' : 'PDF'}</span>
+                    {report.generated_by_name || 'Unknown'}
+                    <span className="ml-2 rounded bg-cyan-500/15 px-2 py-0.5 text-[10px] uppercase text-cyan-300">{report.generated_by_role || 'user'}</span>
                   </td>
+                  <td className="text-slate-300">{new Date(report.created_at).toLocaleString()}</td>
+                  <td className="text-slate-300">
+                    <span className={report.format === 'excel' ? 'text-emerald-300' : 'text-red-300'}>{report.format === 'excel' ? 'Excel' : 'PDF'}</span>
+                  </td>
+                  <td className="text-slate-300">{report.parameters?.row_count ?? 0}</td>
                   <td>
-                    <span className={`rounded px-2 py-1 text-xs font-bold ${status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {status}
+                    <span className={`rounded px-2 py-1 text-xs font-bold ${report.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {report.status}
                     </span>
                   </td>
                   <td className="pr-5">
                     <div className="flex justify-end gap-3 text-slate-200">
-                      <button onClick={() => exportRowsToCsv(`${name}.csv`, [{ name, type, scope, by, generated, format, status }])} className="text-slate-200 hover:text-white">
+                      <button onClick={() => downloadReport(report)} className="text-slate-200 hover:text-white" title={`Download ${report.format.toUpperCase()}`}>
                         <Download className="h-4 w-4" />
                       </button>
-                      <RowActionMenu onEdit={() => alert(`Editing ${name}`)} onDelete={() => deleteReport(name)} />
+                      <RowActionMenu onEdit={() => downloadReport(report)} onDelete={() => deleteReport(report.id)} />
                     </div>
                   </td>
                 </tr>
               ))}
+              {!loading && paginatedReports.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-5 py-8 text-center text-slate-400">No generated reports yet.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -226,11 +345,7 @@ export default function ReportsPage() {
             Showing {filteredReports.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredReports.length)} of {filteredReports.length} reports
           </span>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660] disabled:opacity-55"
-            >
+            <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660] disabled:opacity-55">
               <ChevronLeft className="h-4 w-4" />
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
@@ -244,11 +359,7 @@ export default function ReportsPage() {
                 {page}
               </button>
             ))}
-            <button 
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660] disabled:opacity-55"
-            >
+            <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="flex h-8 w-8 items-center justify-center rounded-md border border-[#0d3660] disabled:opacity-55">
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>

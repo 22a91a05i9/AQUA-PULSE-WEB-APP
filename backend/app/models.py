@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -20,6 +20,7 @@ class User(Base):
     farm_type_id: Mapped[int | None] = mapped_column(ForeignKey("farm_types.id"), nullable=True)
     species_id: Mapped[int | None] = mapped_column(ForeignKey("species.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_portal_access: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -141,6 +142,36 @@ class Device(Base):
     site: Mapped["Site | None"] = relationship("Site", backref="devices")
     created_by_manager: Mapped["User"] = relationship("User", foreign_keys=[created_by_manager_id])
 
+    @property
+    def sensor_type_ids(self) -> list[int]:
+        return sorted([assignment.sensor_type_id for assignment in self.sensor_assignments])
+
+    @property
+    def sensor_types(self) -> list["SensorType"]:
+        return [assignment.sensor_type for assignment in sorted(self.sensor_assignments, key=lambda item: item.sensor_type_id)]
+
+
+class SensorType(Base):
+    __tablename__ = "sensor_types"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    reading_field: Mapped[str] = mapped_column(String(60), unique=True)
+
+
+class DeviceSensorAssignment(Base):
+    __tablename__ = "device_sensor_assignments"
+    __table_args__ = (UniqueConstraint("device_id", "sensor_type_id", name="uq_device_sensor_assignment"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"))
+    sensor_type_id: Mapped[int] = mapped_column(ForeignKey("sensor_types.id"))
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    device: Mapped["Device"] = relationship("Device", backref="sensor_assignments")
+    sensor_type: Mapped["SensorType"] = relationship("SensorType")
+
 
 class Reading(Base):
     __tablename__ = "sensor_readings"
@@ -148,9 +179,14 @@ class Reading(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"))
     site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"), nullable=True)
-    ph: Mapped[float] = mapped_column(Float)
-    temperature_c: Mapped[float] = mapped_column(Float)
-    turbidity: Mapped[float] = mapped_column("turbidity_ntu", Float)
+    ph: Mapped[float | None] = mapped_column(Float, nullable=True)
+    temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    turbidity: Mapped[float | None] = mapped_column("turbidity_ntu", Float, nullable=True)
+    ammonia: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dissolved_oxygen: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nitrate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    salinity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    electric_conductivity: Mapped[float | None] = mapped_column(Float, nullable=True)
     signal_dbm: Mapped[int | None] = mapped_column(Integer, nullable=True)
     battery_v: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -250,4 +286,3 @@ class EmergencyIncident(Base):
     site: Mapped["Site | None"] = relationship("Site")
     triggered_by: Mapped["User"] = relationship("User", foreign_keys=[triggered_by_user_id])
     resolved_by: Mapped["User | None"] = relationship("User", foreign_keys=[resolved_by_user_id])
-

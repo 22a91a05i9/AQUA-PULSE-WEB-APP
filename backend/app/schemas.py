@@ -3,6 +3,9 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
+VALID_SENSOR_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8}
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,11 +61,23 @@ class DeviceCreate(BaseModel):
     gsm_number: str | None = None
     firmware_version: str | None = None
     status: str = "inactive"
+    sensor_type_ids: list[int] = Field(default_factory=lambda: [1, 2, 3])
 
     @field_validator("device_uid")
     @classmethod
     def trim_device_uid(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("sensor_type_ids")
+    @classmethod
+    def validate_sensor_type_ids(cls, value: list[int]) -> list[int]:
+        deduped = sorted(set(value))
+        if not deduped:
+            raise ValueError("At least one sensor type must be selected")
+        invalid = [sensor_id for sensor_id in deduped if sensor_id not in VALID_SENSOR_TYPE_IDS]
+        if invalid:
+            raise ValueError(f"Invalid sensor type id(s): {invalid}")
+        return deduped
 
 
 class DeviceUpdate(DeviceCreate):
@@ -98,10 +113,15 @@ class AssignAgentRequest(BaseModel):
 class ReadingIngest(BaseModel):
     device_id: str
     pond_id: str | None = None
-    temperature_c: float
-    ph: float
+    temperature_c: float | None = None
+    ph: float | None = None
     turbidity: float | None = None
     turbidity_ntu: float | None = None
+    ammonia: float | None = None
+    dissolved_oxygen: float | None = None
+    nitrate: float | None = None
+    salinity: float | None = None
+    electric_conductivity: float | None = None
     signal_dbm: int | None = None
     battery_v: float | None = None
     collected_at: datetime | None = None
@@ -120,8 +140,18 @@ class ReadingIngest(BaseModel):
     def normalize_turbidity(self):
         if self.turbidity is None and self.turbidity_ntu is not None:
             self.turbidity = self.turbidity_ntu
-        if self.turbidity is None:
-            raise ValueError("Either turbidity or turbidity_ntu is required")
+        sensor_values = [
+            self.temperature_c,
+            self.ph,
+            self.turbidity,
+            self.ammonia,
+            self.dissolved_oxygen,
+            self.nitrate,
+            self.salinity,
+            self.electric_conductivity,
+        ]
+        if all(value is None for value in sensor_values):
+            raise ValueError("At least one sensor reading is required")
         return self
 
 
@@ -159,6 +189,15 @@ class SiteOut(BaseModel):
     agents_count: int = 0
 
 
+class SensorTypeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    reading_field: str
+
+
 class DeviceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -172,6 +211,8 @@ class DeviceOut(BaseModel):
     owner_user_id: int | None = None
     site_id: int | None = None
     created_at: datetime
+    sensor_type_ids: list[int] = Field(default_factory=list)
+    sensor_types: list[SensorTypeOut] = Field(default_factory=list)
 
 
 class ReadingOut(BaseModel):
@@ -181,9 +222,14 @@ class ReadingOut(BaseModel):
     device_id: int
     owner_user_id: int | None = None
     site_id: int | None = None
-    temperature_c: float
-    ph: float
+    temperature_c: float | None = None
+    ph: float | None = None
     turbidity: float | None = None
+    ammonia: float | None = None
+    dissolved_oxygen: float | None = None
+    nitrate: float | None = None
+    salinity: float | None = None
+    electric_conductivity: float | None = None
     source: str
     collected_at: datetime
     received_at: datetime
@@ -226,6 +272,8 @@ class ReportOut(BaseModel):
 
     id: int
     user_id: int
+    generated_by_name: str | None = None
+    generated_by_role: str | None = None
     title: str
     report_type: str
     scope: str

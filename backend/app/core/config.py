@@ -1,3 +1,5 @@
+import json
+
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -47,6 +49,9 @@ class Settings(BaseSettings):
                 return ["*"]
             if value == "*":
                 return ["*"]
+            if value.startswith("["):
+                parsed = json.loads(value)
+                return [str(item).strip() for item in parsed if str(item).strip()]
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
@@ -59,6 +64,9 @@ class Settings(BaseSettings):
                 return ["*"]
             if value == "*":
                 return ["*"]
+            if value.startswith("["):
+                parsed = json.loads(value)
+                return [str(item).strip() for item in parsed if str(item).strip()]
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +19,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email, User.is_active.is_(True)))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
+    user.last_portal_access = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
 
     token = create_access_token(str(user.id))
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))

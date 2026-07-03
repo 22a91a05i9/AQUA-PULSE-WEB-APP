@@ -1,10 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Monitor, Save, Search } from 'lucide-react';
+import { Download, Monitor, Pencil, Save, Search } from 'lucide-react';
 import { devices as defaultDevices } from './data';
 import { Panel, StatusBadge, TablePager, ToneIcon } from './components';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
+
+const SENSOR_TYPES = [
+  { id: 1, label: 'pH Sensor' },
+  { id: 2, label: 'Temperature Sensor' },
+  { id: 3, label: 'Turbidity Sensor' },
+  { id: 4, label: 'Ammonia Sensor' },
+  { id: 5, label: 'Dissolved Oxygen Sensor' },
+  { id: 6, label: 'Nitrate Sensor' },
+  { id: 7, label: 'Salinity Sensor' },
+  { id: 8, label: 'Electric Conductivity Sensor' },
+];
+
+const defaultSensorIds = [1, 2, 3];
+
+function sensorNames(ids: number[]) {
+  return SENSOR_TYPES.filter((sensor) => ids.includes(sensor.id)).map((sensor) => sensor.label);
+}
 
 export default function DevicesPage() {
   const [deviceList, setDeviceList] = useState<any[]>([]);
@@ -19,6 +36,8 @@ export default function DevicesPage() {
   const [simNumber, setSimNumber] = useState('');
   const [status, setStatus] = useState('inactive');
   const [deviceType, setDeviceType] = useState('Water Quality');
+  const [selectedSensorIds, setSelectedSensorIds] = useState<number[]>(defaultSensorIds);
+  const [sensorsLocked, setSensorsLocked] = useState(false);
   const [message, setMessage] = useState('');
 
   const loadDevices = async () => {
@@ -39,17 +58,19 @@ export default function DevicesPage() {
           rawStatus: d.status,
           imei: d.imei || '',
           simNumber: d.sim_number || '',
+          sensorTypeIds: d.sensor_type_ids?.length ? d.sensor_type_ids : defaultSensorIds,
+          sensors: sensorNames(d.sensor_type_ids?.length ? d.sensor_type_ids : defaultSensorIds).join(', '),
           registered: d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
           time: d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
         }));
 
         setDeviceList(normalized);
       } else {
-        setDeviceList(defaultDevices.map((device, index) => ({ ...device, dbId: index + 1, rawStatus: device.status.toLowerCase(), imei: '', simNumber: '' })));
+        setDeviceList(defaultDevices.map((device, index) => ({ ...device, dbId: index + 1, rawStatus: device.status.toLowerCase(), imei: '', simNumber: '', sensorTypeIds: defaultSensorIds, sensors: sensorNames(defaultSensorIds).join(', ') })));
       }
     } catch (err) {
       console.error('Failed to load devices from DB, using fallback defaults:', err);
-      setDeviceList(defaultDevices.map((device, index) => ({ ...device, dbId: index + 1, rawStatus: device.status.toLowerCase(), imei: '', simNumber: '' })));
+      setDeviceList(defaultDevices.map((device, index) => ({ ...device, dbId: index + 1, rawStatus: device.status.toLowerCase(), imei: '', simNumber: '', sensorTypeIds: defaultSensorIds, sensors: sensorNames(defaultSensorIds).join(', ') })));
     } finally {
       setLoading(false);
     }
@@ -60,7 +81,7 @@ export default function DevicesPage() {
   }, []);
 
   const filteredDevices = useMemo(
-    () => deviceList.filter((device) => rowMatchesSearch([device.name, device.id, device.type, device.site, device.status], search)),
+    () => deviceList.filter((device) => rowMatchesSearch([device.name, device.id, device.type, device.site, device.status, device.sensors], search)),
     [deviceList, search],
   );
 
@@ -78,6 +99,10 @@ export default function DevicesPage() {
       setMessage('Device Name and Device ID are required.');
       return;
     }
+    if (selectedSensorIds.length === 0) {
+      setMessage('Choose at least one sensor type for this device.');
+      return;
+    }
 
     try {
       const session = getAuthSession();
@@ -92,6 +117,7 @@ export default function DevicesPage() {
             gsm_number: null,
             firmware_version: deviceType,
             status: status,
+            sensor_type_ids: selectedSensorIds,
           }),
         });
 
@@ -100,6 +126,8 @@ export default function DevicesPage() {
         setImei('');
         setSimNumber('');
         setStatus('inactive');
+        setSelectedSensorIds(defaultSensorIds);
+        setSensorsLocked(false);
         setEditingDeviceId(null);
         setMessage(editingDeviceId ? 'Device successfully updated in database!' : 'Device successfully registered in database!');
         loadDevices();
@@ -117,6 +145,8 @@ export default function DevicesPage() {
     setSimNumber(device.simNumber || '');
     setStatus(device.rawStatus || (device.status === 'Active' ? 'active' : 'inactive'));
     setDeviceType(device.type);
+    setSelectedSensorIds(device.sensorTypeIds?.length ? device.sensorTypeIds : defaultSensorIds);
+    setSensorsLocked(true);
     setMessage('Editing selected device.');
   };
 
@@ -147,8 +177,19 @@ export default function DevicesPage() {
         Site: device.site,
         Status: device.status,
         Registered: device.registered,
+        Sensors: device.sensors,
       })),
     );
+  };
+
+  const toggleSensor = (sensorId: number) => {
+    if (sensorsLocked) return;
+    setSelectedSensorIds((current) =>
+      current.includes(sensorId)
+        ? current.filter((id) => id !== sensorId)
+        : [...current, sensorId].sort((a, b) => a - b),
+    );
+    setMessage('');
   };
 
   return (
@@ -204,6 +245,56 @@ export default function DevicesPage() {
             </label>
           </div>
 
+          <div className="mt-6 rounded-lg border border-[#0d3660] bg-[#020b18]/35 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white">Device Sensors</h3>
+                <p className="mt-1 text-xs text-slate-300">Selected sensors: {selectedSensorIds.length}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (sensorsLocked) {
+                    setSensorsLocked(false);
+                    setMessage('Sensor selection unlocked for editing.');
+                  } else {
+                    if (selectedSensorIds.length === 0) {
+                      setMessage('Choose at least one sensor before saving sensor selection.');
+                      return;
+                    }
+                    setSensorsLocked(true);
+                    setMessage('Sensor selection saved.');
+                  }
+                }}
+                className="flex h-10 items-center gap-2 rounded-md border border-[#0d3660] px-4 text-sm font-bold text-white"
+              >
+                {sensorsLocked ? <Pencil className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                {sensorsLocked ? 'Edit Sensors' : 'Save Sensors'}
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {SENSOR_TYPES.map((sensor) => (
+                <label
+                  key={sensor.id}
+                  className={`flex min-h-12 items-center gap-3 rounded-md border px-3 py-2 text-sm font-semibold ${
+                    selectedSensorIds.includes(sensor.id)
+                      ? 'border-cyan-400 bg-cyan-500/10 text-white'
+                      : 'border-[#0d3660] bg-[#020b18]/50 text-slate-300'
+                  } ${sensorsLocked ? 'opacity-80' : 'cursor-pointer'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSensorIds.includes(sensor.id)}
+                    disabled={sensorsLocked}
+                    onChange={() => toggleSensor(sensor.id)}
+                    className="h-4 w-4 accent-cyan-400"
+                  />
+                  <span>{sensor.id}. {sensor.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {message && (
             <p className={`mt-4 text-sm font-semibold ${message.includes('success') ? 'text-emerald-400' : 'text-amber-400'}`}>
               {message}
@@ -222,6 +313,8 @@ export default function DevicesPage() {
                   setImei('');
                   setSimNumber('');
                   setStatus('inactive');
+                  setSelectedSensorIds(defaultSensorIds);
+                  setSensorsLocked(false);
                   setMessage('');
                 }}
                 className="mt-3 flex h-11 w-full items-center justify-center rounded-md border border-[#0d3660] font-bold text-white"
@@ -257,6 +350,7 @@ export default function DevicesPage() {
               <th className="py-3 font-medium">Device Name</th>
               <th className="py-3 font-medium">Device ID</th>
               <th className="py-3 font-medium">Type</th>
+              <th className="py-3 font-medium">Sensors</th>
               <th className="py-3 font-medium">Location / Site</th>
               <th className="py-3 font-medium">Status</th>
               <th className="py-3 font-medium">Registered On</th>
@@ -266,7 +360,7 @@ export default function DevicesPage() {
           <tbody>
             {filteredDevices.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-slate-400">No devices match the current search.</td>
+                <td colSpan={8} className="py-6 text-center text-slate-400">No devices match the current search.</td>
               </tr>
             ) : (
               filteredDevices.map((device) => (
@@ -274,6 +368,7 @@ export default function DevicesPage() {
                   <td className="py-4 font-semibold text-white">{device.name}</td>
                   <td className="text-slate-300">{device.id}</td>
                   <td className="text-slate-300">{device.type}</td>
+                  <td className="max-w-xs text-slate-300">{device.sensors}</td>
                   <td className="text-slate-300">{device.site}</td>
                   <td><StatusBadge status={device.status} /></td>
                   <td className="text-slate-300">{device.registered}<br /><span className="text-xs">{device.time}</span></td>

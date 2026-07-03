@@ -132,6 +132,39 @@ export const translations: Record<string, Record<string, string>> = {
     add_agent: 'ఏజెంట్‌ను జోడించండి',
     view_all_agents: 'బృంద ఏజెంట్లందరినీ చూడండి',
     save_changes: 'మార్పులను సేవ్ చేయి'
+  },
+  hi: {
+    // Nav / Titles
+    dashboard: 'डैशबोर्ड',
+    sites: 'साइटें',
+    agents: 'एजेंट',
+    devices: 'डिवाइस',
+    live: 'लाइव मॉनिटरिंग',
+    assignments: 'असाइनमेंट',
+    alerts: 'अलर्ट',
+    data: 'डेटा',
+    analytics: 'विश्लेषण',
+    reports: 'रिपोर्ट',
+    settings: 'सेटिंग्स',
+    sos: 'SOS आपातकाल',
+    need_help: 'सहायता चाहिए?',
+    contact_support: 'सपोर्ट से संपर्क करें',
+    sign_out: 'साइन आउट',
+    // Settings / Preferences
+    my_account: 'मेरा खाता',
+    my_account_team: 'मेरी खाता टीम',
+    preferences: 'प्राथमिकताएं',
+    theme: 'थीम',
+    language: 'भाषा',
+    time_zone: 'समय क्षेत्र',
+    units: 'इकाइयां',
+    change_password: 'पासवर्ड बदलें',
+    two_factor: 'दो-कारक प्रमाणीकरण',
+    app_version: 'ऐप संस्करण',
+    invite_user: 'उपयोगकर्ता आमंत्रित करें',
+    add_agent: 'एजेंट जोड़ें',
+    view_all_agents: 'सभी टीम एजेंट देखें',
+    save_changes: 'बदलाव सहेजें'
   }
 };
 

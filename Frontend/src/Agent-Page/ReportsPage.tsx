@@ -18,6 +18,9 @@ import {
   Thermometer,
   AlertTriangle,
 } from 'lucide-react';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
+import { config } from '../lib/config';
 import { exportRowsToCsv, RowActionMenu } from '../lib/tableActions';
 const stats = [
   { label: 'Reports Generated', value: 43, change: '++12% vs last 7 days', color: '#22d3ee', icon: FileText },
@@ -40,11 +43,11 @@ const reports = [
 ];
 
 const popularReports = [
-  { name: 'Water Quality Summary', desc: 'Overview of key water quality parameters', icon: Waves, color: '#22d3ee' },
-  { name: 'Device Performance Report', desc: 'Performance and status of all devices', icon: BarChart3, color: '#22c55e' },
-  { name: 'Alert Summary Report', desc: 'Summary of all alerts and notifications', icon: Bell, color: '#f59e0b' },
-  { name: 'Feed Analysis Report', desc: 'Feed consumption and feed analysis', icon: FileText, color: '#a78bfa' },
-  { name: 'Growth Report', desc: 'Fish growth and biomass analysis', icon: TrendingUp, color: '#34d399' },
+  { name: 'Water Quality Summary', type: 'water_quality', desc: 'Overview of key water quality parameters', icon: Waves, color: '#22d3ee' },
+  { name: 'Device Performance Report', type: 'device_status', desc: 'Performance and status of all devices', icon: BarChart3, color: '#22c55e' },
+  { name: 'Alert Summary Report', type: 'alert_summary', desc: 'Summary of all alerts and notifications', icon: Bell, color: '#f59e0b' },
+  { name: 'Feed Analysis Report', type: undefined, desc: 'Feed consumption and feed analysis', icon: FileText, color: '#a78bfa' },
+  { name: 'Growth Report', type: undefined, desc: 'Fish growth and biomass analysis', icon: TrendingUp, color: '#34d399' },
 ];
 
 const scheduledReports = [
@@ -58,11 +61,55 @@ const scheduledReports = [
 export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [generating, setGenerating] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   const filteredReports = reports.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()));
   const totalPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
   const paginatedReports = filteredReports.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const generateAndDownload = async (report: { name: string; type?: string }, format: 'pdf' | 'excel') => {
+    if (!report.type) {
+      alert('This report type is not connected to live report generation yet.');
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      setGenerating(`${report.type}-${format}`);
+      const created = await apiRequest<{ id: number; title: string; format: string }>('/reports', {
+        method: 'POST',
+        token: session.token,
+        body: {
+          title: `${report.name} - ${new Date().toLocaleString()}`,
+          report_type: report.type,
+          scope: 'Assigned sites',
+          format,
+          parameters: { generated_from: 'agent_reports' },
+        },
+      });
+      const response = await fetch(`${config.apiBaseUrl.replace(/\/+$/, '')}/reports/${created.id}/download`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') || '';
+      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || `${created.title}.${format === 'excel' ? 'xls' : 'pdf'}`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to generate agent report:', err);
+      alert('Failed to generate report.');
+    } finally {
+      setGenerating(null);
+    }
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -222,13 +269,27 @@ export default function ReportsPage() {
               {popularReports.map((r, i) => {
                 const Icon = r.icon;
                 return (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[#071f35]/50 hover:bg-[#071f35] transition-all cursor-pointer">
+                  <div key={i} className="rounded-lg bg-[#071f35]/50 p-3 transition-all hover:bg-[#071f35]">
+                    <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: r.color + '20' }}>
                       <Icon className="w-5 h-5" style={{ color: r.color }} />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-white truncate">{r.name}</p>
                       <p className="text-xs text-slate-400 truncate">{r.desc}</p>
+                    </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {(['pdf', 'excel'] as const).map((format) => (
+                        <button
+                          key={format}
+                          onClick={() => generateAndDownload(r, format)}
+                          disabled={generating === `${r.type}-${format}`}
+                          className="h-8 rounded-md border border-[#0d3660] text-[11px] font-semibold uppercase text-[#22d3ee] transition hover:bg-[#020b18]/70 disabled:opacity-60"
+                        >
+                          {generating === `${r.type}-${format}` ? 'Wait' : format}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 );

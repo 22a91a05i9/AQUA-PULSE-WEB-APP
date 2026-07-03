@@ -55,15 +55,21 @@ interface Device {
   turbidity: string;
   ec: string;
   salinity: string;
+  sensorTypeIds: number[];
 }
 
 interface SensorReading {
   id: number;
   device_id: number;
   site_id: number | null;
-  temperature_c: number;
-  ph: number;
-  turbidity: number;
+  temperature_c: number | null;
+  ph: number | null;
+  turbidity: number | null;
+  ammonia?: number | null;
+  dissolved_oxygen?: number | null;
+  nitrate?: number | null;
+  salinity?: number | null;
+  electric_conductivity?: number | null;
   battery_v?: number | null;
   signal_dbm?: number | null;
   collected_at: string;
@@ -75,6 +81,23 @@ const getDOValue = (temp: number) => {
   return Number((8.5 - (temp - 20) * 0.15).toFixed(1));
 };
 
+const SENSOR_METRICS = [
+  { id: 2, key: 'temperature_c', label: 'Temperature', unit: 'deg C', color: '#22d3ee', icon: Thermometer },
+  { id: 1, key: 'ph', label: 'pH', unit: '', color: '#ef4444', icon: Droplet },
+  { id: 3, key: 'turbidity', label: 'Turbidity', unit: 'NTU', color: '#a855f7', icon: Droplet },
+  { id: 4, key: 'ammonia', label: 'Ammonia', unit: '', color: '#f59e0b', icon: AlertCircle },
+  { id: 5, key: 'dissolved_oxygen', label: 'Dissolved Oxygen', unit: 'mg/L', color: '#3b82f6', icon: Wind },
+  { id: 6, key: 'nitrate', label: 'Nitrate', unit: '', color: '#10b981', icon: Droplet },
+  { id: 7, key: 'salinity', label: 'Salinity', unit: '', color: '#14b8a6', icon: Droplet },
+  { id: 8, key: 'electric_conductivity', label: 'Electrical Conductivity', unit: 'uS/cm', color: '#10b981', icon: Cpu },
+];
+
+function formatMetricValue(reading: SensorReading | undefined, key: string) {
+  const value = reading ? (reading as any)[key] : null;
+  if (value == null) return 'N/A';
+  return Number(value).toFixed(key === 'ph' ? 2 : key === 'turbidity' ? 0 : 1);
+}
+
 const statusColors: Record<string, string> = {
   online: '#22c55e',
   warning: '#f59e0b',
@@ -84,10 +107,10 @@ const statusColors: Record<string, string> = {
 
 /* ─── Static fallback devices (shown when backend is unreachable) ─── */
 const fallbackDevices: Device[] = [
-  { id: '1', uid: 'DVC-001', name: 'Device DVC-001', type: 'Water Quality Sensor', pondName: 'Pond 01 - North Farm', siteId: 1, status: 'online', lastSeen: '2 min ago', battery: 95, mac: 'AC:23:3F:7B:1A:01', ip: '192.168.1.101', firmware: 'v1.2.4', signal: 'Excellent (-35 dBm)', installedOn: 'Jan 15, 2024', temp: '28.1', pH: '7.8', do: '6.2', turbidity: '24', ec: '420', salinity: '0.5' },
-  { id: '2', uid: 'DVC-003', name: 'Device DVC-003', type: 'Water Quality Sensor', pondName: 'Pond 03 - Central Farm', siteId: 2, status: 'online', lastSeen: '5 min ago', battery: 87, mac: 'AC:23:3F:7B:1A:02', ip: '192.168.1.102', firmware: 'v1.2.4', signal: 'Good (-48 dBm)', installedOn: 'Feb 20, 2024', temp: '27.5', pH: '8.2', do: '5.4', turbidity: '32', ec: '415', salinity: '0.4' },
-  { id: '3', uid: 'DVC-005', name: 'Device DVC-005', type: 'Water Quality Sensor', pondName: 'Pond 02 - East Farm', siteId: 1, status: 'warning', lastSeen: '15 min ago', battery: 42, mac: 'AC:23:3F:7B:1A:03', ip: '192.168.1.103', firmware: 'v1.2.3', signal: 'Fair (-62 dBm)', installedOn: 'Mar 10, 2024', temp: '31.2', pH: '8.9', do: '3.2', turbidity: '120', ec: '450', salinity: '0.6' },
-  { id: '4', uid: 'DVC-007', name: 'Device DVC-007', type: 'Water Quality Sensor', pondName: 'Pond 01 - North Farm', siteId: 1, status: 'offline', lastSeen: '2 hr ago', battery: 12, mac: 'AC:23:3F:7B:1A:04', ip: '192.168.1.104', firmware: 'v1.2.2', signal: 'N/A', installedOn: 'Apr 05, 2024', temp: '26.8', pH: '7.5', do: '6.8', turbidity: '18', ec: '400', salinity: '0.3' },
+  { id: '1', uid: 'DVC-001', name: 'Device DVC-001', type: 'Water Quality Sensor', pondName: 'Pond 01 - North Farm', siteId: 1, status: 'online', lastSeen: '2 min ago', battery: 95, mac: 'AC:23:3F:7B:1A:01', ip: '192.168.1.101', firmware: 'v1.2.4', signal: 'Excellent (-35 dBm)', installedOn: 'Jan 15, 2024', temp: '28.1', pH: '7.8', do: '6.2', turbidity: '24', ec: '420', salinity: '0.5', sensorTypeIds: [1, 2, 3] },
+  { id: '2', uid: 'DVC-003', name: 'Device DVC-003', type: 'Water Quality Sensor', pondName: 'Pond 03 - Central Farm', siteId: 2, status: 'online', lastSeen: '5 min ago', battery: 87, mac: 'AC:23:3F:7B:1A:02', ip: '192.168.1.102', firmware: 'v1.2.4', signal: 'Good (-48 dBm)', installedOn: 'Feb 20, 2024', temp: '27.5', pH: '8.2', do: '5.4', turbidity: '32', ec: '415', salinity: '0.4', sensorTypeIds: [1, 2, 3] },
+  { id: '3', uid: 'DVC-005', name: 'Device DVC-005', type: 'Water Quality Sensor', pondName: 'Pond 02 - East Farm', siteId: 1, status: 'warning', lastSeen: '15 min ago', battery: 42, mac: 'AC:23:3F:7B:1A:03', ip: '192.168.1.103', firmware: 'v1.2.3', signal: 'Fair (-62 dBm)', installedOn: 'Mar 10, 2024', temp: '31.2', pH: '8.9', do: '3.2', turbidity: '120', ec: '450', salinity: '0.6', sensorTypeIds: [1, 2, 3] },
+  { id: '4', uid: 'DVC-007', name: 'Device DVC-007', type: 'Water Quality Sensor', pondName: 'Pond 01 - North Farm', siteId: 1, status: 'offline', lastSeen: '2 hr ago', battery: 12, mac: 'AC:23:3F:7B:1A:04', ip: '192.168.1.104', firmware: 'v1.2.2', signal: 'N/A', installedOn: 'Apr 05, 2024', temp: '26.8', pH: '7.5', do: '6.8', turbidity: '18', ec: '400', salinity: '0.3', sensorTypeIds: [1, 2, 3] },
 ];
 
 // Historical trend data matching Pic 3
@@ -215,12 +238,13 @@ export default function DevicesPage() {
               ? `Measured (${latestReading.signal_dbm} dBm)`
               : 'N/A',
           installedOn: new Date(dev.created_at || Date.now()).toLocaleDateString(),
-          temp: latestReading ? latestReading.temperature_c.toFixed(1) : '28.1',
-          pH: latestReading ? latestReading.ph.toFixed(1) : '8.9',
-          do: latestReading ? getDOValue(latestReading.temperature_c).toFixed(1) : '3.2',
-          turbidity: latestReading ? latestReading.turbidity.toFixed(0) : '120',
-          ec: '420',
-          salinity: '0.5',
+          temp: latestReading?.temperature_c != null ? latestReading.temperature_c.toFixed(1) : 'N/A',
+          pH: latestReading?.ph != null ? latestReading.ph.toFixed(1) : 'N/A',
+          do: latestReading?.dissolved_oxygen != null ? latestReading.dissolved_oxygen.toFixed(1) : 'N/A',
+          turbidity: latestReading?.turbidity != null ? latestReading.turbidity.toFixed(0) : 'N/A',
+          ec: latestReading?.electric_conductivity != null ? latestReading.electric_conductivity.toFixed(1) : 'N/A',
+          salinity: latestReading?.salinity != null ? latestReading.salinity.toFixed(1) : 'N/A',
+          sensorTypeIds: dev.sensor_type_ids?.length ? dev.sensor_type_ids : [1, 2, 3],
         };
       })
     : fallbackDevices;
@@ -260,15 +284,14 @@ export default function DevicesPage() {
 
   const selectedTrendData = selectedLiveReadings.slice(0, 10).reverse().map((reading: SensorReading) => ({
     time: new Date(reading.collected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    value: reading.temperature_c,
+    value: reading.temperature_c ?? reading.ph ?? reading.turbidity ?? 0,
   }));
   const latestSelectedReading = selectedLiveReadings[0] as SensorReading | undefined;
-  const selectedTemp = latestSelectedReading ? Number(latestSelectedReading.temperature_c).toFixed(1) : selectedDevice?.temp || 'N/A';
-  const selectedPh = latestSelectedReading ? Number(latestSelectedReading.ph).toFixed(2) : selectedDevice?.pH || 'N/A';
-  const selectedTurbidity = latestSelectedReading ? Number(latestSelectedReading.turbidity).toFixed(0) : selectedDevice?.turbidity || 'N/A';
-  const selectedDo = latestSelectedReading
-    ? getDOValue(Number(latestSelectedReading.temperature_c)).toFixed(1)
-    : selectedDevice?.do || 'N/A';
+  const selectedMetrics = SENSOR_METRICS.filter((metric) => selectedDevice?.sensorTypeIds.includes(metric.id));
+  const selectedTemp = formatMetricValue(latestSelectedReading, 'temperature_c');
+  const selectedPh = formatMetricValue(latestSelectedReading, 'ph');
+  const selectedTurbidity = formatMetricValue(latestSelectedReading, 'turbidity');
+  const selectedDo = formatMetricValue(latestSelectedReading, 'dissolved_oxygen');
 
   const getBatteryColorClass = (battery: number | null, status: string) => {
     if (status === 'offline' || battery === null) return 'text-slate-500';
@@ -439,7 +462,7 @@ export default function DevicesPage() {
                       { label: 'Turbidity', value: selectedTurbidity, unit: 'NTU', status: selectedTurbidity !== 'N/A' && Number(selectedTurbidity) > 100 ? 'High' : 'Normal', statusColor: selectedTurbidity !== 'N/A' && Number(selectedTurbidity) > 100 ? '#ef4444' : '#22c55e', color: '#a855f7', icon: Droplet },
                       { label: 'Electrical Conductivity', value: selectedDevice.ec, unit: 'µS/cm', status: 'Normal', statusColor: '#22c55e', color: '#10b981', icon: Cpu },
                       { label: 'Salinity', value: selectedDevice.salinity, unit: 'ppt', status: 'Normal', statusColor: '#22c55e', color: '#3b82f6', icon: Droplet },
-                    ].map((p, idx) => {
+                    ].filter((p) => selectedMetrics.some((metric) => metric.label === p.label)).map((p, idx) => {
                       const ParamIcon = p.icon;
                       return (
                         <div key={idx} className="bg-[#041526]/50 border border-slate-800 p-4 rounded-xl">
@@ -504,31 +527,31 @@ export default function DevicesPage() {
                           <tr className="border-b border-slate-800 text-slate-500 uppercase">
                             <th className="px-4 py-2.5">Device</th>
                             <th className="px-4 py-2.5">Site</th>
-                            <th className="px-4 py-2.5">Temp C</th>
-                            <th className="px-4 py-2.5">pH</th>
-                            <th className="px-4 py-2.5">Turbidity</th>
+                            {selectedMetrics.map((metric) => (
+                              <th key={metric.key} className="px-4 py-2.5">{metric.label}</th>
+                            ))}
                             <th className="px-4 py-2.5">Collected At</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800 text-slate-300">
                           {readingsLoading ? (
                             <tr>
-                              <td colSpan={6} className="px-4 py-5 text-center text-slate-400">Loading sensor readings...</td>
+                              <td colSpan={3 + selectedMetrics.length} className="px-4 py-5 text-center text-slate-400">Loading sensor readings...</td>
                             </tr>
                           ) : selectedLiveReadings.length > 0 ? (
                             selectedLiveReadings.slice(0, 5).map((reading: SensorReading) => (
                               <tr key={reading.id} className="hover:bg-[#071f35]/30">
                                 <td className="px-4 py-2.5 font-semibold text-white">{selectedDevice.uid}</td>
                                 <td className="px-4 py-2.5 font-medium text-white">{selectedDevice.pondName}</td>
-                                <td className="px-4 py-2.5">{Number(reading.temperature_c).toFixed(1)}</td>
-                                <td className="px-4 py-2.5">{Number(reading.ph).toFixed(2)}</td>
-                                <td className="px-4 py-2.5">{Number(reading.turbidity).toFixed(0)}</td>
+                                {selectedMetrics.map((metric) => (
+                                  <td key={metric.key} className="px-4 py-2.5">{formatMetricValue(reading, metric.key)}</td>
+                                ))}
                                 <td className="px-4 py-2.5 text-slate-400">{new Date(reading.collected_at).toLocaleString()}</td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={6} className="px-4 py-5 text-center text-slate-400">
+                              <td colSpan={3 + selectedMetrics.length} className="px-4 py-5 text-center text-slate-400">
                                 No sensor readings found for this assigned device.
                               </td>
                             </tr>
@@ -632,31 +655,31 @@ export default function DevicesPage() {
                     <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#041526]/30">
                       <th className="py-4 px-6">Device</th>
                       <th className="py-4 px-6">Site</th>
-                      <th className="py-4 px-6">Temp C</th>
-                      <th className="py-4 px-6">pH</th>
-                      <th className="py-4 px-6">Turbidity</th>
+                      {selectedMetrics.map((metric) => (
+                        <th key={metric.key} className="py-4 px-6">{metric.label}</th>
+                      ))}
                       <th className="py-4 px-6">Collected At</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
                     {readingsLoading ? (
                       <tr>
-                        <td colSpan={6} className="py-8 px-6 text-center text-slate-400">Loading sensor readings...</td>
+                        <td colSpan={3 + selectedMetrics.length} className="py-8 px-6 text-center text-slate-400">Loading sensor readings...</td>
                       </tr>
                     ) : selectedLiveReadings.length > 0 ? (
                       selectedLiveReadings.map((reading: SensorReading) => (
                         <tr key={reading.id} className="hover:bg-[#071f35]/30 transition">
                           <td className="py-4 px-6 font-semibold text-white">{selectedDevice.uid}</td>
                           <td className="py-4 px-6 font-medium text-white">{selectedDevice.pondName}</td>
-                          <td className="py-4 px-6">{Number(reading.temperature_c).toFixed(1)}</td>
-                          <td className="py-4 px-6">{Number(reading.ph).toFixed(2)}</td>
-                          <td className="py-4 px-6">{Number(reading.turbidity).toFixed(0)}</td>
+                          {selectedMetrics.map((metric) => (
+                            <td key={metric.key} className="py-4 px-6">{formatMetricValue(reading, metric.key)}</td>
+                          ))}
                           <td className="py-4 px-6 text-slate-400">{new Date(reading.collected_at).toLocaleString()}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} className="py-8 px-6 text-center text-slate-400">
+                        <td colSpan={3 + selectedMetrics.length} className="py-8 px-6 text-center text-slate-400">
                           No sensor readings found for this assigned device.
                         </td>
                       </tr>

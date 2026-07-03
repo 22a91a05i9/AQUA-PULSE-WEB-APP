@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.db import get_db
 from app.deps import require_role
-from app.models import Alert, Device, DeviceSiteAssignment, FarmType, Reading, Site, SiteAgentAssignment, Species, User
+from app.models import Alert, Device, DeviceOwnerAssignment, DeviceSiteAssignment, FarmType, Reading, Site, SiteAgentAssignment, Species, User
 from app.schemas import (
     AgentCreate,
     AssignAgentRequest,
@@ -60,6 +60,11 @@ def owner_overview(
                 "temperature_c": latest_reading.temperature_c,
                 "ph": latest_reading.ph,
                 "turbidity": latest_reading.turbidity,
+                "ammonia": latest_reading.ammonia,
+                "dissolved_oxygen": latest_reading.dissolved_oxygen,
+                "nitrate": latest_reading.nitrate,
+                "salinity": latest_reading.salinity,
+                "electric_conductivity": latest_reading.electric_conductivity,
                 "collected_at": latest_reading.collected_at.isoformat(),
                 "battery_v": latest_reading.battery_v,
                 "signal_dbm": latest_reading.signal_dbm,
@@ -106,6 +111,11 @@ def owner_overview(
                 "temperature_c": item.temperature_c,
                 "ph": item.ph,
                 "turbidity": item.turbidity,
+                "ammonia": item.ammonia,
+                "dissolved_oxygen": item.dissolved_oxygen,
+                "nitrate": item.nitrate,
+                "salinity": item.salinity,
+                "electric_conductivity": item.electric_conductivity,
                 "collected_at": item.collected_at,
             }
             for item in readings

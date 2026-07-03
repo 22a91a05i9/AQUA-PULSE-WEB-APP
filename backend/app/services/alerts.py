@@ -31,9 +31,16 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
         ("ph", "ph", reading.ph),
         ("temperature_c", "temperature_c", reading.temperature_c),
         ("turbidity_ntu", "turbidity", reading.turbidity),
+        ("ammonia", "ammonia", reading.ammonia),
+        ("dissolved_oxygen", "dissolved_oxygen", reading.dissolved_oxygen),
+        ("nitrate", "nitrate", reading.nitrate),
+        ("salinity", "salinity", reading.salinity),
+        ("electric_conductivity", "electric_conductivity", reading.electric_conductivity),
     ]
 
     for metric, threshold_key, actual_value in checks:
+        if actual_value is None:
+            continue
         threshold = thresholds.get(threshold_key)
         if not threshold:
             continue

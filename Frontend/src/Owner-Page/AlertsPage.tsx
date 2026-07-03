@@ -119,7 +119,7 @@ export default function AlertsPage() {
   }
 
   if (selectedAlert) {
-    return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} />;
+    return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} onAlertUpdated={loadAlerts} />;
   }
 
   const filtered = alerts.filter(a => {
@@ -306,9 +306,54 @@ function AlertListRow({ alert, onClick }: { alert: AlertRow; onClick?: () => voi
   );
 }
 
-function AlertDetails({ alert, onBack }: { alert: AlertRow; onBack: () => void }) {
+function AlertDetails({ alert, onBack, onAlertUpdated }: { alert: AlertRow; onBack: () => void; onAlertUpdated?: () => void }) {
   const style = toneStyles[alert.tone];
   const AlertIcon = style.icon;
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+
+  const handleAcknowledge = async () => {
+    try {
+      setIsAcknowledging(true);
+      const session = getAuthSession();
+      if (!session) return;
+      
+      await apiRequest(`/readings/alerts/${alert.id}/acknowledge`, {
+        method: 'PUT',
+        token: session.token,
+      });
+      
+      alert.tone = 'Resolved';
+      if (onAlertUpdated) onAlertUpdated();
+    } catch (err) {
+      console.error('Failed to acknowledge alert:', err);
+      alert('Failed to acknowledge alert');
+    } finally {
+      setIsAcknowledging(false);
+    }
+  };
+
+  const handleResolve = async () => {
+    try {
+      setIsResolving(true);
+      const session = getAuthSession();
+      if (!session) return;
+      
+      await apiRequest(`/readings/alerts/${alert.id}/resolve`, {
+        method: 'PUT',
+        token: session.token,
+      });
+      
+      alert.tone = 'Resolved';
+      if (onAlertUpdated) onAlertUpdated();
+    } catch (err) {
+      console.error('Failed to resolve alert:', err);
+      alert('Failed to resolve alert');
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
   const details: Array<[string, string, LucideIcon]> = [
     ['Alert Type', alert.alertType, AlertTriangle],
     ['Severity', alert.tone, Shield],
@@ -338,16 +383,39 @@ function AlertDetails({ alert, onBack }: { alert: AlertRow; onBack: () => void }
       </div>
 
       <section className={`rounded-lg border p-5 ${style.border} ${alert.tone === 'Critical' ? 'bg-red-950/25' : 'bg-[#071f35]/70'}`}>
-        <div className="flex items-center gap-5">
-          <div className={`flex h-24 w-24 items-center justify-center rounded-full ${style.bg} ${style.text}`}>
-            <AlertIcon className="h-12 w-12" />
+        <div className="flex items-center justify-between gap-5">
+          <div className="flex items-center gap-5 flex-1">
+            <div className={`flex h-24 w-24 items-center justify-center rounded-full ${style.bg} ${style.text}`}>
+              <AlertIcon className="h-12 w-12" />
+            </div>
+            <div className="flex-1">
+              <p className={`font-bold ${style.text}`}><span className="mr-2 inline-block h-3 w-3 rounded-full bg-current" />{alert.tone}</p>
+              <h3 className="mt-4 text-2xl font-bold text-white">{alert.title}</h3>
+              <p className="mt-2 text-white">{alert.pond} <span className="mx-4">-</span> {alert.farm}</p>
+              <p className={`mt-4 font-bold ${style.text}`}>{alert.metric}</p>
+            </div>
           </div>
-          <div className="flex-1">
-            <p className={`font-bold ${style.text}`}><span className="mr-2 inline-block h-3 w-3 rounded-full bg-current" />{alert.tone}</p>
-            <h3 className="mt-4 text-2xl font-bold text-white">{alert.title}</h3>
-            <p className="mt-2 text-white">{alert.pond} <span className="mx-4">-</span> {alert.farm}</p>
-            <p className={`mt-4 font-bold ${style.text}`}>{alert.metric}</p>
-          </div>
+          {alert.tone !== 'Resolved' && (
+            <div className="flex gap-2 flex-col">
+              <button
+                onClick={handleAcknowledge}
+                disabled={isAcknowledging || isResolving}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/50 text-amber-400 font-semibold text-sm hover:bg-amber-500/30 disabled:opacity-50"
+              >
+                {isAcknowledging ? '...' : '✓ Acknowledge'}
+              </button>
+              <button
+                onClick={handleResolve}
+                disabled={isAcknowledging || isResolving}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/30 disabled:opacity-50"
+              >
+                {isResolving ? '...' : '✓ Resolve'}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 border-t border-[#0d3660]/60 pt-4 flex items-center justify-between text-sm">
+          <span className="text-slate-300">Status: <span className={`font-bold ${style.text}`}>{alert.tone}</span></span>
           <span className={`text-sm font-bold ${style.text}`}>{alert.time}</span>
         </div>
       </section>

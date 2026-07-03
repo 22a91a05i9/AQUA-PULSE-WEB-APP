@@ -36,16 +36,39 @@ type Device = {
   battery: number;
   batteryLabel: string;
   latest_reading?: {
-    temperature_c: number;
-    ph: number;
-    turbidity: number;
+    temperature_c: number | null;
+    ph: number | null;
+    turbidity: number | null;
+    ammonia?: number | null;
+    dissolved_oxygen?: number | null;
+    nitrate?: number | null;
+    salinity?: number | null;
+    electric_conductivity?: number | null;
     collected_at: string;
     battery_v: number | null;
     signal_dbm: number | null;
   } | null;
+  sensor_type_ids: number[];
 };
 
 const defaultDevices: Device[] = [];
+
+const SENSOR_METRICS = [
+  { id: 2, key: 'temperature_c', label: 'Temperature', unit: 'deg C', tone: 'text-cyan-300' },
+  { id: 1, key: 'ph', label: 'pH', unit: '', tone: 'text-lime-300' },
+  { id: 3, key: 'turbidity', label: 'Turbidity', unit: 'NTU', tone: 'text-purple-300' },
+  { id: 4, key: 'ammonia', label: 'Ammonia', unit: '', tone: 'text-amber-300' },
+  { id: 5, key: 'dissolved_oxygen', label: 'Dissolved Oxygen', unit: 'mg/L', tone: 'text-sky-300' },
+  { id: 6, key: 'nitrate', label: 'Nitrate', unit: '', tone: 'text-emerald-300' },
+  { id: 7, key: 'salinity', label: 'Salinity', unit: '', tone: 'text-teal-300' },
+  { id: 8, key: 'electric_conductivity', label: 'Conductivity', unit: 'uS/cm', tone: 'text-cyan-300' },
+];
+
+function formatReadingValue(latest: Device['latest_reading'], key: string, unit: string) {
+  const value = latest ? (latest as any)[key] : null;
+  if (value == null) return 'N/A';
+  return `${Number(value).toFixed(key === 'ph' ? 2 : 1)}${unit ? ` ${unit}` : ''}`;
+}
 
 const statusClass: Record<DeviceStatus, string> = {
   Online: 'text-emerald-400',
@@ -115,6 +138,7 @@ export default function DevicesPage() {
               battery,
               batteryLabel,
               latest_reading: d.latest_reading,
+              sensor_type_ids: d.sensor_type_ids?.length ? d.sensor_type_ids : [1, 2, 3],
             };
           });
           setDeviceList(mappedDevices);
@@ -339,15 +363,16 @@ export default function DevicesPage() {
 
 function DeviceDetails({ device, onBack }: { device: Device; onBack: () => void }) {
   const latest = device.latest_reading;
+  const assignedMetrics = SENSOR_METRICS.filter((metric) => device.sensor_type_ids.includes(metric.id));
+  const topMetrics = assignedMetrics.slice(0, 3);
   const metrics = [
-    ['Temperature', latest ? `${latest.temperature_c} °C` : 'N/A', latest ? 'Normal' : 'No Data'],
-    ['pH', latest ? `${latest.ph}` : 'N/A', latest ? 'Normal' : 'No Data'],
-    ['Turbidity', latest ? `${latest.turbidity} NTU` : 'N/A', latest ? 'Normal' : 'No Data'],
+    ...assignedMetrics.map((metric) => [
+      metric.label,
+      formatReadingValue(latest, metric.key, metric.unit),
+      latest && (latest as any)[metric.key] != null ? 'Normal' : 'No Data',
+    ]),
     ['Battery Level', `${device.battery}%`, device.batteryLabel],
     ['Signal Strength', latest?.signal_dbm != null ? `${latest.signal_dbm} dBm` : 'N/A', latest?.signal_dbm != null ? 'Strong' : ''],
-    ['Dissolved Oxygen', 'Not Equipped', 'N/A'],
-    ['Conductivity', 'Not Equipped', 'N/A'],
-    ['Salinity', 'Not Equipped', 'N/A'],
   ];
 
   return (
@@ -376,9 +401,14 @@ function DeviceDetails({ device, onBack }: { device: Device; onBack: () => void 
           </div>
         </div>
         <DetailTop label="Status" value={device.status} tone={device.status === 'Online' ? 'text-emerald-400' : 'text-red-400'} />
-        <DetailTop label="Temperature" value={latest ? `${latest.temperature_c} °C` : 'N/A'} tone={latest ? 'text-cyan-300' : 'text-slate-400'} />
-        <DetailTop label="pH" value={latest ? `${latest.ph}` : 'N/A'} tone={latest ? 'text-lime-300' : 'text-slate-400'} />
-        <DetailTop label="Turbidity" value={latest ? `${latest.turbidity} NTU` : 'N/A'} tone={latest ? 'text-purple-300' : 'text-slate-400'} />
+        {topMetrics.map((metric) => (
+          <DetailTop
+            key={metric.key}
+            label={metric.label}
+            value={formatReadingValue(latest, metric.key, metric.unit)}
+            tone={latest && (latest as any)[metric.key] != null ? metric.tone : 'text-slate-400'}
+          />
+        ))}
         <DetailTop label="Battery Level" value={`${device.battery}%`} tone="text-white" />
       </section>
 

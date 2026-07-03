@@ -11,6 +11,17 @@ from app.services.alerts import create_alerts_for_reading
 
 logger = logging.getLogger(__name__)
 
+SENSOR_FIELD_BY_ID = {
+    1: "ph",
+    2: "temperature_c",
+    3: "turbidity",
+    4: "ammonia",
+    5: "dissolved_oxygen",
+    6: "nitrate",
+    7: "salinity",
+    8: "electric_conductivity",
+}
+
 
 def resolve_owner_id(db: Session, device: Device) -> int | None:
     if device.owner_user_id:
@@ -65,12 +76,22 @@ def store_device_reading(db: Session, payload: ReadingIngest, source: str = "htt
     if site_id and device.site_id != site_id:
         device.site_id = site_id
 
+    assigned_fields = {SENSOR_FIELD_BY_ID[sensor_id] for sensor_id in device.sensor_type_ids if sensor_id in SENSOR_FIELD_BY_ID}
+    reading_values = {
+        "temperature_c": payload.temperature_c if "temperature_c" in assigned_fields else None,
+        "ph": payload.ph if "ph" in assigned_fields else None,
+        "turbidity": payload.turbidity if "turbidity" in assigned_fields else None,
+        "ammonia": payload.ammonia if "ammonia" in assigned_fields else None,
+        "dissolved_oxygen": payload.dissolved_oxygen if "dissolved_oxygen" in assigned_fields else None,
+        "nitrate": payload.nitrate if "nitrate" in assigned_fields else None,
+        "salinity": payload.salinity if "salinity" in assigned_fields else None,
+        "electric_conductivity": payload.electric_conductivity if "electric_conductivity" in assigned_fields else None,
+    }
+
     reading = Reading(
         device_id=device.id,
         site_id=site_id,
-        temperature_c=payload.temperature_c,
-        ph=payload.ph,
-        turbidity=payload.turbidity,
+        **reading_values,
         signal_dbm=payload.signal_dbm,
         battery_v=payload.battery_v,
         raw_payload={**payload.model_dump(mode="json"), "_source": source},
@@ -82,14 +103,12 @@ def store_device_reading(db: Session, payload: ReadingIngest, source: str = "htt
     create_alerts_for_reading(db, reading)
     db.refresh(reading)
     logger.info(
-        "Reading stored: source=%s device_uid=%s reading_id=%s site_id=%s owner_user_id=%s temp=%s ph=%s turbidity=%s",
+        "Reading stored: source=%s device_uid=%s reading_id=%s site_id=%s owner_user_id=%s values=%s",
         source,
         payload.device_id,
         reading.id,
         reading.site_id,
         reading.owner_user_id,
-        reading.temperature_c,
-        reading.ph,
-        reading.turbidity,
+        reading_values,
     )
     return reading

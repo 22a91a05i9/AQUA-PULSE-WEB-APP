@@ -11,6 +11,7 @@ from app.models import (
     Alert,
     Device,
     DeviceOwnerAssignment,
+    DeviceSensorAssignment,
     DeviceSiteAssignment,
     Reading,
     Report,
@@ -32,6 +33,17 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/manager", tags=["manager"])
+
+
+def replace_device_sensors(db: Session, device: Device, sensor_type_ids: list[int]) -> None:
+    db.execute(delete(DeviceSensorAssignment).where(DeviceSensorAssignment.device_id == device.id))
+    db.flush()
+    for sensor_type_id in sensor_type_ids:
+        db.add(DeviceSensorAssignment(device_id=device.id, sensor_type_id=sensor_type_id))
+
+
+def device_out(device: Device) -> DeviceOut:
+    return DeviceOut.model_validate(device)
 
 
 def manager_alerts_from_table(db: Session) -> list[Alert]:
@@ -66,7 +78,7 @@ def manager_overview(
             "open_alerts": open_alert_count,
         },
         "owners": [UserOut.model_validate(item).model_dump() for item in owners],
-        "devices": [DeviceOut.model_validate(item).model_dump() for item in devices],
+        "devices": [device_out(item).model_dump() for item in devices],
         "alerts": [AlertOut.model_validate(item).model_dump() for item in alerts],
     }
 
@@ -188,9 +200,11 @@ def create_device(
         created_by_manager_id=current_user.id,
     )
     db.add(device)
+    db.flush()
+    replace_device_sensors(db, device, payload.sensor_type_ids)
     db.commit()
     db.refresh(device)
-    return DeviceOut.model_validate(device)
+    return device_out(device)
 
 
 @router.get("/devices", response_model=list[DeviceOut])
@@ -199,7 +213,7 @@ def list_devices(
     db: Session = Depends(get_db),
 ):
     devices = db.scalars(select(Device).order_by(Device.created_at.desc())).all()
-    return [DeviceOut.model_validate(item) for item in devices]
+    return [device_out(item) for item in devices]
 
 
 @router.put("/devices/{device_id}", response_model=DeviceOut)
@@ -223,9 +237,10 @@ def update_device(
     device.gsm_number = payload.gsm_number
     device.firmware_version = payload.firmware_version
     device.status = payload.status
+    replace_device_sensors(db, device, payload.sensor_type_ids)
     db.commit()
     db.refresh(device)
-    return DeviceOut.model_validate(device)
+    return device_out(device)
 
 
 @router.delete("/devices/{device_id}")
@@ -240,6 +255,7 @@ def delete_device(
 
     db.execute(delete(Alert).where(Alert.device_id == device_id))
     db.execute(delete(Reading).where(Reading.device_id == device_id))
+    db.execute(delete(DeviceSensorAssignment).where(DeviceSensorAssignment.device_id == device_id))
     db.execute(delete(DeviceSiteAssignment).where(DeviceSiteAssignment.device_id == device_id))
     db.execute(delete(DeviceOwnerAssignment).where(DeviceOwnerAssignment.device_id == device_id))
     db.delete(device)
@@ -283,4 +299,4 @@ def assign_device_to_owner(
     )
     db.commit()
     db.refresh(device)
-    return DeviceOut.model_validate(device)
+    return device_out(device)

@@ -53,6 +53,16 @@ def agent_overview(
                 "status": device.status,
                 "site_id": device.site_id,
                 "created_at": device.created_at,
+                "sensor_type_ids": device.sensor_type_ids,
+                "sensor_types": [
+                    {
+                        "id": sensor_type.id,
+                        "code": sensor_type.code,
+                        "name": sensor_type.name,
+                        "reading_field": sensor_type.reading_field,
+                    }
+                    for sensor_type in device.sensor_types
+                ],
             }
             for device in devices
         ],
@@ -85,6 +95,11 @@ def agent_overview(
                 "temperature_c": item.temperature_c,
                 "ph": item.ph,
                 "turbidity": item.turbidity,
+                "ammonia": item.ammonia,
+                "dissolved_oxygen": item.dissolved_oxygen,
+                "nitrate": item.nitrate,
+                "salinity": item.salinity,
+                "electric_conductivity": item.electric_conductivity,
                 "battery_v": item.battery_v,
                 "signal_dbm": item.signal_dbm,
                 "received_at": item.received_at,
