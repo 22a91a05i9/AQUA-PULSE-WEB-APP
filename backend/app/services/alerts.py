@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Alert, Reading, SiteAgentAssignment
-from app.services.email_service import send_agent_alert_summary_email
+from app.services.email_service import send_alert_summary_email
 
 
 def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
@@ -83,14 +83,14 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
     if created_alerts:
         db.flush()
         db.commit()
-        agent_alert_map: dict[int, list[Alert]] = {}
+        recipient_alert_map: dict[int, list[Alert]] = {}
         for alert in created_alerts:
-            if alert.recipient_role != "agent" or not alert.recipient or alert.severity not in {"warning", "critical"}:
+            if not alert.recipient or alert.severity not in {"warning", "critical"}:
                 continue
-            agent_alert_map.setdefault(alert.recipient_user_id, []).append(alert)
+            recipient_alert_map.setdefault(alert.recipient_user_id, []).append(alert)
 
-        for grouped_alerts in agent_alert_map.values():
-            send_agent_alert_summary_email(grouped_alerts[0].recipient, grouped_alerts)
+        for grouped_alerts in recipient_alert_map.values():
+            send_alert_summary_email(grouped_alerts[0].recipient, grouped_alerts, db)
 
     return created_alerts
 

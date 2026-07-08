@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Droplet,
-  Search,
   CalendarDays,
   AlertTriangle,
   AlertCircle,
@@ -24,8 +23,7 @@ export type ManagerPageId =
   | 'analytics'
   | 'reports'
   | 'settings'
-  | 'alerts'
-  | 'sos';
+  | 'alerts';
 
 export function ManagerShell({
   session,
@@ -349,14 +347,6 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
   return (
     <header className="dashboard-header hidden items-center justify-end border-b border-[#0d3660] bg-[#031426]/80 backdrop-blur z-30 relative lg:flex">
       <div className="dashboard-header-actions flex items-center gap-4">
-        <div className="relative hidden lg:block">
-          <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input
-            className="h-12 w-80 rounded-lg border border-[#0d3660] bg-[#020b18]/70 pl-12 pr-4 text-sm outline-none transition focus:border-cyan-300"
-            placeholder="Search owners, devices, sites..."
-          />
-        </div>
-
         {/* Calendar Picker Button & Popover */}
         <div className="relative" ref={calendarRef}>
           <button
@@ -511,7 +501,11 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
           )}
         </div>
 
-        <button className="flex items-center gap-3 rounded-lg border border-[#0d3660] bg-[#041526] px-3 py-2">
+        <button
+          type="button"
+          onClick={() => onNavigate?.('settings')}
+          className="flex items-center gap-3 rounded-lg border border-[#0d3660] bg-[#041526] px-3 py-2 transition hover:border-cyan-300"
+        >
           <img
             className="h-10 w-10 rounded-full"
             src={session.user.avatarUrl}
@@ -521,7 +515,6 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
             <p className="text-sm font-bold text-white">{managerUser.name}</p>
             <p className="text-xs text-slate-300">{managerUser.email}</p>
           </div>
-          <ChevronDown className="h-4 w-4 text-slate-300" />
         </button>
         <button
           onClick={onLogout}
@@ -534,7 +527,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
   );
 }
 
-export function ControlCenter({ compact = false }: { compact?: boolean }) {
+export function ControlCenter({ compact = false, onOpen }: { compact?: boolean; onOpen?: () => void }) {
   return (
     <section className="panel-surface rounded-lg border border-[#0d3660] bg-[#041526]/80 p-[clamp(1rem,2vw,1.75rem)] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -546,7 +539,7 @@ export function ControlCenter({ compact = false }: { compact?: boolean }) {
           </p>
         </div>
         {!compact && (
-          <button className="hidden h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white transition hover:border-cyan-300 lg:flex">
+          <button onClick={onOpen} className="hidden h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white transition hover:border-cyan-300 lg:flex">
             Open Control Center
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -674,14 +667,17 @@ export function SelectField({ label, placeholder, required = false }: { label: s
 export function PrimaryButton({
   children,
   onClick,
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className="h-12 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 px-5 text-sm font-bold text-white shadow-[0_12px_35px_rgba(37,99,235,0.2)] transition hover:from-cyan-400 hover:to-blue-500"
+      disabled={disabled}
+      className="h-12 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 px-5 text-sm font-bold text-white shadow-[0_12px_35px_rgba(37,99,235,0.2)] transition hover:from-cyan-400 hover:to-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>

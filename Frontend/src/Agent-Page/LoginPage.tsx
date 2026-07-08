@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react';
 import { ApiError } from '../lib/api';
-import { login, type AuthSession } from '../lib/auth';
+import { login, requestPasswordReset, resetPassword, type AuthSession } from '../lib/auth';
+import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 
 interface LoginPageProps {
   onLogin: (session: AuthSession) => void;
@@ -11,9 +12,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetTokenValue, setResetTokenValue] = useState('');
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetConfirmValue, setResetConfirmValue] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,9 +32,71 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       onLogin(session);
     } catch (error) {
       const fallbackMessage = 'Login failed. Please check your details or backend connection.';
-      setMessage(error instanceof ApiError || error instanceof Error ? error.message : fallbackMessage);
+      const errorMessage = error instanceof ApiError || error instanceof Error ? error.message : fallbackMessage;
+      setMessage(errorMessage === 'Password is invalid' ? 'Password is wrong' : errorMessage);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const emailToUse = (resetEmail || email).trim();
+    if (!emailToUse) {
+      setResetMessage('Enter your registered email first.');
+      return;
+    }
+    setResetLoading(true);
+    setResetMessage('');
+    try {
+      const response = await requestPasswordReset(emailToUse);
+      setResetEmail(emailToUse);
+      if (response.reset_token) {
+        setResetTokenValue(response.reset_token);
+        setResetMessage(
+          response.email_sent
+            ? `${response.message} The reset code was also filled here for development.`
+            : `${response.message} Development reset code has been filled automatically because SMTP email is not configured.`,
+        );
+      } else {
+        setResetMessage(
+          response.smtp_configured === false
+            ? `${response.message} SMTP is not configured on the backend, so no email can be sent.`
+            : response.message,
+        );
+      }
+    } catch (error) {
+      setResetMessage(error instanceof Error ? error.message : 'Unable to request password reset.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTokenValue.trim() || !resetPasswordValue || !resetConfirmValue) {
+      setResetMessage('Enter the reset code, new password, and confirm password.');
+      return;
+    }
+    if (!isAllowedPassword(resetPasswordValue)) {
+      setResetMessage(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+    if (resetPasswordValue !== resetConfirmValue) {
+      setResetMessage('New password and confirm password do not match.');
+      return;
+    }
+    setResetLoading(true);
+    setResetMessage('');
+    try {
+      const response = await resetPassword(resetTokenValue.trim(), resetPasswordValue);
+      setResetMessage(response.message);
+      setPassword('');
+      setResetPasswordValue('');
+      setResetConfirmValue('');
+      setTimeout(() => setResetOpen(false), 1200);
+    } catch (error) {
+      setResetMessage(error instanceof Error ? error.message : 'Unable to reset password.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -105,28 +174,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </button>
           </div>
 
-          <div className="mt-[clamp(10px,1.2vw,16px)] flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[clamp(11px,0.9vw,14px)] font-medium leading-tight text-white">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="sr-only"
-              />
-              <span
-                className={`flex h-[clamp(14px,1.3vw,20px)] w-[clamp(14px,1.3vw,20px)] shrink-0 items-center justify-center rounded-[4px] border transition ${
-                  rememberMe
-                    ? 'border-blue-400 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]'
-                    : 'border-slate-500 bg-[#041326]/80'
-                }`}
-              >
-                {rememberMe && <Check className="h-[78%] w-[78%] text-white" strokeWidth={3} />}
-              </span>
-              Remember me
-            </label>
+          <div className="mt-[clamp(10px,1.2vw,16px)] flex shrink-0 justify-end">
             <button
               type="button"
-              onClick={() => setMessage('Password reset link is ready to send.')}
+              onClick={() => {
+                setResetEmail(email);
+                setResetMessage('');
+                setResetOpen(true);
+              }}
               className="max-w-full whitespace-nowrap text-[clamp(11px,0.9vw,14px)] font-semibold text-cyan-300 transition hover:text-cyan-100"
             >
               Forgot Password?
@@ -142,22 +197,77 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <ArrowRight className="absolute right-[5.5%] h-[48%] w-auto" />
           </button>
 
-          <div className="mt-[clamp(10px,1.5vw,20px)] shrink-0 text-center text-[clamp(11px,0.95vw,14px)] font-medium text-slate-350">
-            Don't have an account?{' '}
-            <span
-              onClick={() => setMessage('Registration flow is ready to connect.')}
-              className="font-semibold text-[#22d3ee] hover:text-cyan-100 hover:underline cursor-pointer"
-            >
-              Sign Up
-            </span>
-          </div>
-
           {message && (
             <p className="mt-4 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-center text-sm font-medium text-cyan-100">
               {message}
             </p>
           )}
         </form>
+        {resetOpen && (
+          <div className="absolute inset-0 z-[4] flex items-center justify-center bg-black/62 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-xl border border-cyan-300/25 bg-[#06162b] p-5 shadow-2xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-extrabold text-white">Reset Password</h2>
+                  <p className="mt-1 text-sm text-slate-300">Enter your registered email, request a code, then set a new password.</p>
+                </div>
+                <button type="button" onClick={() => setResetOpen(false)} className="rounded-md px-3 py-1 text-sm font-bold text-slate-300 hover:bg-white/10 hover:text-white">
+                  Close
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  placeholder="Registered email"
+                  className="login-input h-11 w-full rounded-lg border border-slate-400/25 bg-[#041326]/80 px-3 text-sm text-white outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={resetLoading}
+                  className="h-10 w-full rounded-lg border border-cyan-300/40 text-sm font-bold text-cyan-100 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {resetLoading ? 'Sending...' : 'Send Reset Code'}
+                </button>
+                <input
+                  value={resetTokenValue}
+                  onChange={(event) => setResetTokenValue(event.target.value)}
+                  placeholder="Reset code"
+                  className="login-input h-11 w-full rounded-lg border border-slate-400/25 bg-[#041326]/80 px-3 text-sm text-white outline-none"
+                />
+                <input
+                  type="password"
+                  value={resetPasswordValue}
+                  onChange={(event) => setResetPasswordValue(event.target.value)}
+                  placeholder="New password"
+                  className="login-input h-11 w-full rounded-lg border border-slate-400/25 bg-[#041326]/80 px-3 text-sm text-white outline-none"
+                />
+                <input
+                  type="password"
+                  value={resetConfirmValue}
+                  onChange={(event) => setResetConfirmValue(event.target.value)}
+                  placeholder="Confirm password"
+                  className="login-input h-11 w-full rounded-lg border border-slate-400/25 bg-[#041326]/80 px-3 text-sm text-white outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={resetLoading}
+                  className="h-11 w-full rounded-lg bg-gradient-to-r from-cyan-300 via-sky-500 to-blue-700 text-sm font-extrabold text-white disabled:cursor-wait disabled:opacity-70"
+                >
+                  Update Password
+                </button>
+                {resetMessage && (
+                  <p className="rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100">
+                    {resetMessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );

@@ -103,9 +103,18 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 };
 
 export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
-  const [waterQualityPond] = useState('All Ponds');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showAllParameters, setShowAllParameters] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState('All Months');
+  const [showMonthMenu, setShowMonthMenu] = useState(false);
+  const [incidentRange, setIncidentRange] = useState('7 Days');
+  const [topAlertsRange, setTopAlertsRange] = useState('7 Days');
+  const [showIncidentRange, setShowIncidentRange] = useState(false);
+  const [showTopAlertsRange, setShowTopAlertsRange] = useState(false);
+  const [showIncidentReport, setShowIncidentReport] = useState(false);
+  const [incidentReportRows, setIncidentReportRows] = useState<any[]>([]);
+  const rangeOptions = ['7 Days', '6 Months', '1 Year', '+1 Year'];
 
   useEffect(() => {
     async function loadAnalyticsData() {
@@ -139,6 +148,14 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
   const liveDevices = data?.devices || [];
   const liveReadings = data?.recent_readings || [];
   const liveAlerts = data?.alerts || [];
+  const filterAlertsByRange = (alerts: any[], range: string) => {
+    const now = Date.now();
+    const days = range === '7 Days' ? 7 : range === '6 Months' ? 183 : range === '1 Year' ? 365 : 3650;
+    const cutoff = now - days * 24 * 60 * 60 * 1000;
+    return alerts.filter((alert: any) => alert.created_at && new Date(alert.created_at).getTime() >= cutoff);
+  };
+  const incidentAlerts = filterAlertsByRange(liveAlerts, incidentRange);
+  const topRangeAlerts = filterAlertsByRange(liveAlerts, topAlertsRange);
   const activeAlerts = liveAlerts.filter((alert: any) => alert.status === 'open' || alert.status === 'acknowledged');
   const onlineDevices = liveDevices.filter((device: any) => device.status === 'active' || device.status === 'online');
   const latestReading = liveReadings[0];
@@ -175,18 +192,41 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
     turbidity: Number(reading.turbidity),
   }));
 
-  const monthlySummaryTotal = Math.max(liveDevices.length, 1);
   const criticalCount = activeAlerts.filter((alert: any) => alert.severity === 'critical').length;
   const warningCount = activeAlerts.filter((alert: any) => alert.severity === 'warning').length;
-  const normalCount = Math.max(onlineDevices.length - criticalCount - warningCount, 0);
-  const unmonitoredCount = Math.max(assignedSites.length - new Set(liveDevices.map((device: any) => device.site_id)).size, 0);
-  const dynamicMonthlySummary = [
-    { name: 'Critical', value: criticalCount, color: '#ef4444' },
-    { name: 'Warning', value: warningCount, color: '#f59e0b' },
-    { name: 'Normal', value: normalCount, color: '#22c55e' },
-    { name: 'Unmonitored', value: unmonitoredCount, color: '#6b7280' },
-  ];
-  const dynamicMonthlyTotal = dynamicMonthlySummary.reduce((sum, item) => sum + item.value, 0) || monthlySummaryTotal;
+  const registrationMonths = liveDevices.reduce((map: Map<string, number>, device: any) => {
+    const label = device.created_at ? new Date(device.created_at).toLocaleDateString([], { month: 'short', year: 'numeric' }) : 'Unknown';
+    map.set(label, (map.get(label) || 0) + 1);
+    return map;
+  }, new Map());
+  const monthColors = ['#22d3ee', '#22c55e', '#f59e0b', '#a78bfa', '#ef4444', '#14b8a6'];
+  const monthOptions = ['All Months', ...Array.from(registrationMonths.keys())];
+  const dynamicMonthlySummary = Array.from(registrationMonths.entries())
+    .filter(([name]) => selectedMonth === 'All Months' || name === selectedMonth)
+    .map(([name, value], index) => ({
+    name,
+    value,
+    color: monthColors[index % monthColors.length],
+  }));
+  const dynamicMonthlyTotal = dynamicMonthlySummary.reduce((sum, item) => sum + item.value, 0) || 1;
+
+  const generateIncidentReport = async () => {
+    const sourceAlerts = incidentAlerts.length > 0 ? incidentAlerts : liveAlerts;
+    const rows = sourceAlerts.slice(0, 25).map((alert: any) => ({
+      createdAt: alert.created_at ? new Date(alert.created_at).toLocaleString() : 'N/A',
+      title: alert.title || alert.metric || 'Water Quality Incident',
+      site: alert.site_name || alert.site || (alert.site_id ? `Site #${alert.site_id}` : 'Assigned site'),
+      device: alert.device_uid || alert.device || (alert.device_id ? `Device ${alert.device_id}` : 'Device'),
+      priority: alert.severity || 'warning',
+      status: alert.status || 'open',
+      description: alert.message || `${alert.metric || 'Parameter'} requires attention.`,
+    }));
+
+    setIncidentReportRows(rows);
+    setShowIncidentReport(true);
+  };
+
+  const metricValue = (key: string) => latestReading && latestReading[key] != null ? Number(latestReading[key]) : null;
 
   const dynamicParameterInsights = [
     {
@@ -221,10 +261,14 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
       color: latestReading && latestReading.turbidity > 100 ? '#ef4444' : '#22c55e',
       sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.turbidity)),
     },
+    { label: 'Ammonia', value: metricValue('ammonia')?.toFixed(2) || 'N/A', unit: 'mg/L', status: metricValue('ammonia') && metricValue('ammonia')! > 1 ? 'High' : 'Normal', color: metricValue('ammonia') && metricValue('ammonia')! > 1 ? '#ef4444' : '#22c55e', sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.ammonia || 0)) },
+    { label: 'Nitrate', value: metricValue('nitrate')?.toFixed(2) || 'N/A', unit: 'mg/L', status: 'Normal', color: '#22c55e', sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.nitrate || 0)) },
+    { label: 'Salinity', value: metricValue('salinity')?.toFixed(1) || 'N/A', unit: 'ppt', status: 'Normal', color: '#14b8a6', sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.salinity || 0)) },
+    { label: 'Conductivity', value: metricValue('electric_conductivity')?.toFixed(1) || 'N/A', unit: 'uS/cm', status: 'Normal', color: '#10b981', sparkline: liveReadings.slice(0, 7).reverse().map((r: any) => Number(r.electric_conductivity || 0)) },
   ];
 
   const alertDays = Array.from(
-    liveAlerts.reduce((map: Map<string, any>, alert: any) => {
+    incidentAlerts.reduce((map: Map<string, any>, alert: any) => {
       const date = new Date(alert.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
       const current = map.get(date) || { date, critical: 0, warning: 0, resolved: 0 };
       if (alert.status === 'resolved' || alert.status === 'safe') {
@@ -239,7 +283,7 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
     }, new Map()).values()
   ).slice(-7);
 
-  const alertCounts = liveAlerts.reduce((map: Map<string, number>, alert: any) => {
+  const alertCounts = topRangeAlerts.reduce((map: Map<string, number>, alert: any) => {
     const key = alert.title || alert.metric || 'Water Quality Alert';
     map.set(key, (map.get(key) || 0) + 1);
     return map;
@@ -285,11 +329,6 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               <h3 className="text-base font-semibold text-white">Water Quality Trend</h3>
               <Info className="w-4 h-4 text-slate-400" />
             </div>
-            <div className="relative">
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white">
-                {waterQualityPond} <ChevronDown className="w-3 h-3" />
-              </button>
-            </div>
           </div>
           <div className="flex items-center gap-5 mb-3 text-xs">
             <span className="flex items-center gap-1.5 text-slate-400"><span className="w-3 h-1 rounded-full bg-[#3b82f6]" />Temperature (°C)</span>
@@ -315,11 +354,30 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
 
         <div className="glass rounded-xl p-5 card-hover">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-white">Monthly Summary</h3>
+            <h3 className="text-base font-semibold text-white">Device Registration Months</h3>
             <div className="relative">
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white">
-                May 2024 <ChevronDown className="w-3 h-3" />
+              <button
+                onClick={() => setShowMonthMenu((value) => !value)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white"
+              >
+                {selectedMonth} <ChevronDown className="w-3 h-3" />
               </button>
+              {showMonthMenu && (
+                <div className="absolute right-0 z-50 mt-2 min-w-40 rounded-lg border border-[#0d3660] bg-[#031426] p-1 shadow-2xl">
+                  {monthOptions.map((month) => (
+                    <button
+                      key={month}
+                      onClick={() => {
+                        setSelectedMonth(month);
+                        setShowMonthMenu(false);
+                      }}
+                      className="block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-[#071f35]"
+                    >
+                      {month}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -361,14 +419,9 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               <h3 className="text-base font-semibold text-white">Parameter Insights</h3>
               <Info className="w-4 h-4 text-slate-400" />
             </div>
-            <div className="relative">
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white">
-                All Parameters <ChevronDown className="w-3 h-3" />
-              </button>
-            </div>
           </div>
           <div className="space-y-3">
-            {dynamicParameterInsights.map((pi, i) => {
+              {(showAllParameters ? dynamicParameterInsights : dynamicParameterInsights.slice(0, 4)).map((pi, i) => {
               const data = (pi.sparkline.length > 0 ? pi.sparkline : [0]).map((v, idx) => ({ v, idx }));
               return (
                 <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[#071f35]/50 animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>
@@ -397,8 +450,8 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               );
             })}
           </div>
-          <button className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors">
-            View All Parameters <ArrowRight className="w-4 h-4" />
+          <button onClick={() => setShowAllParameters((value) => !value)} className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors">
+            {showAllParameters ? 'Show Selected Parameters' : 'View All Parameters'} <ArrowRight className="w-4 h-4" />
           </button>
         </div>
 
@@ -410,9 +463,28 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               <Info className="w-4 h-4 text-slate-400" />
             </div>
             <div className="relative">
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white">
-                Last 7 Days <ChevronDown className="w-3 h-3" />
+              <button
+                onClick={() => setShowIncidentRange((value) => !value)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white"
+              >
+                {incidentRange} <ChevronDown className="w-3 h-3" />
               </button>
+              {showIncidentRange && (
+                <div className="absolute right-0 z-50 mt-2 min-w-32 rounded-lg border border-[#0d3660] bg-[#031426] p-1 shadow-2xl">
+                  {rangeOptions.map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => {
+                        setIncidentRange(range);
+                        setShowIncidentRange(false);
+                      }}
+                      className="block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-[#071f35]"
+                    >
+                      {range}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4 text-xs text-slate-400 mb-2">
@@ -433,7 +505,7 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <button className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors">
+          <button onClick={generateIncidentReport} className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors">
             View Incident Report <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -446,9 +518,28 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               <Info className="w-4 h-4 text-slate-400" />
             </div>
             <div className="relative">
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white">
-                Last 7 Days <ChevronDown className="w-3 h-3" />
+              <button
+                onClick={() => setShowTopAlertsRange((value) => !value)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white"
+              >
+                {topAlertsRange} <ChevronDown className="w-3 h-3" />
               </button>
+              {showTopAlertsRange && (
+                <div className="absolute right-0 z-50 mt-2 min-w-32 rounded-lg border border-[#0d3660] bg-[#031426] p-1 shadow-2xl">
+                  {rangeOptions.map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => {
+                        setTopAlertsRange(range);
+                        setShowTopAlertsRange(false);
+                      }}
+                      className="block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-[#071f35]"
+                    >
+                      {range}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="space-y-3">
@@ -473,6 +564,63 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
           </button>
         </div>
       </div>
+
+      {showIncidentReport && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 py-6">
+          <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-xl border border-[#0d3660] bg-[#031426] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#0d3660] px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Incident Report</h3>
+                <p className="text-xs text-slate-400">Range: {incidentRange} • Rows: {incidentReportRows.length}</p>
+              </div>
+              <button
+                onClick={() => setShowIncidentReport(false)}
+                className="rounded-lg border border-[#0d3660] px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-[#071f35]"
+              >
+                Close
+              </button>
+            </div>
+            <div className="max-h-[66vh] overflow-auto">
+              {incidentReportRows.length === 0 ? (
+                <div className="px-5 py-10 text-center text-sm text-slate-400">
+                  No incident or alert data found for this range.
+                </div>
+              ) : (
+                <table className="w-full min-w-[850px] text-left text-sm">
+                  <thead className="sticky top-0 bg-[#061b30] text-xs uppercase text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3">Time</th>
+                      <th className="px-4 py-3">Incident</th>
+                      <th className="px-4 py-3">Site</th>
+                      <th className="px-4 py-3">Device</th>
+                      <th className="px-4 py-3">Priority</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#0d3660]">
+                    {incidentReportRows.map((row, index) => (
+                      <tr key={`${row.createdAt}-${index}`} className="text-slate-200 hover:bg-[#071f35]/70">
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-300">{row.createdAt}</td>
+                        <td className="px-4 py-3 font-semibold text-white">{row.title}</td>
+                        <td className="px-4 py-3">{row.site}</td>
+                        <td className="px-4 py-3">{row.device}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.priority === 'critical' ? 'bg-red-500/15 text-red-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                            {row.priority}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{row.status}</td>
+                        <td className="px-4 py-3 text-slate-300">{row.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

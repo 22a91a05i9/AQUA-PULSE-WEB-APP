@@ -5,7 +5,6 @@ import {
   LayoutGrid,
   List,
   Eye,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
   Cpu,
@@ -18,7 +17,6 @@ import {
   Wind,
   Edit,
   AlertCircle,
-  Settings,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -292,6 +290,26 @@ export default function DevicesPage() {
   const selectedPh = formatMetricValue(latestSelectedReading, 'ph');
   const selectedTurbidity = formatMetricValue(latestSelectedReading, 'turbidity');
   const selectedDo = formatMetricValue(latestSelectedReading, 'dissolved_oxygen');
+  const selectedDeviceAlerts = selectedDevice
+    ? (data?.alerts || []).filter((alert: any) => Number(alert.device_id) === Number(selectedDevice.id))
+    : [];
+
+  const editSelectedDevice = () => {
+    if (!selectedDevice) return;
+    const type = window.prompt('Edit device type:', selectedDevice.type);
+    if (type === null) return;
+    const group = window.prompt('Edit group/pond:', selectedDevice.pondName);
+    if (group === null) return;
+    const firmware = window.prompt('Edit firmware:', selectedDevice.firmware);
+    if (firmware === null) return;
+    setSelectedDevice({
+      ...selectedDevice,
+      type: type.trim() || selectedDevice.type,
+      pondName: group.trim() || selectedDevice.pondName,
+      firmware: firmware.trim() || selectedDevice.firmware,
+    });
+    setActiveTab('settings');
+  };
 
   const getBatteryColorClass = (battery: number | null, status: string) => {
     if (status === 'offline' || battery === null) return 'text-slate-500';
@@ -354,9 +372,6 @@ export default function DevicesPage() {
             <div className="metric-value metric-value-sm font-bold text-white mt-1">{maintenanceDevs}</div>
             <div className="metric-desc text-slate-400 font-semibold mt-1">{maintenancePct}%</div>
           </div>
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-500/10 border border-slate-500/30">
-            <Settings className="w-5 h-5 text-slate-400" />
-          </div>
         </div>
       </div>
 
@@ -404,12 +419,12 @@ export default function DevicesPage() {
             </div>
 
             <div className="flex items-center gap-3 self-end md:self-center">
-              <button className="h-9 px-4 flex items-center gap-2 rounded-lg bg-[#06b6d4] hover:bg-[#0891b2] text-white text-xs font-semibold transition">
+              <button
+                onClick={editSelectedDevice}
+                className="h-9 px-4 flex items-center gap-2 rounded-lg bg-[#06b6d4] hover:bg-[#0891b2] text-white text-xs font-semibold transition"
+              >
                 <Edit className="w-3.5 h-3.5" />
                 <span>Edit</span>
-              </button>
-              <button className="p-2.5 rounded-lg border border-slate-700/50 hover:bg-slate-800/50 transition">
-                <MoreVertical className="w-4 h-4 text-slate-400" />
               </button>
             </div>
           </div>
@@ -711,20 +726,83 @@ export default function DevicesPage() {
             </div>
           )}
 
-          {activeTab !== 'overview' && activeTab !== 'liveData' && (
-            <div className="glass rounded-xl p-8 border border-slate-800 text-center flex flex-col items-center justify-center min-h-[200px]">
-              <Cpu className="w-10 h-10 text-[#06b6d4] opacity-50 mb-3 animate-float" />
-              <h3 className="text-base font-bold text-white mb-1 capitalize">{activeTab} Details</h3>
-              <p className="text-xs text-slate-400 max-w-sm">
-                The {activeTab} panel is fully active and loaded.
-              </p>
-              <button
-                onClick={() => setSelectedDevice(null)}
-                className="mt-5 h-9 px-4 flex items-center gap-2 rounded-lg border border-slate-700/50 text-xs font-semibold text-[#06b6d4] hover:text-[#22d3ee] transition"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                Back to Devices
-              </button>
+          {activeTab === 'history' && (
+            <div className="glass rounded-xl border border-slate-800 overflow-hidden">
+              <div className="p-5 border-b border-slate-800">
+                <h3 className="text-base font-bold text-white">Reading History</h3>
+                <p className="mt-1 text-xs text-slate-400">Historical database readings for {selectedDevice.name}.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[#041526]/30 text-xs uppercase text-slate-400">
+                    <tr>
+                      <th className="px-5 py-3">Collected At</th>
+                      {selectedMetrics.map((metric) => <th key={metric.key} className="px-5 py-3">{metric.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {selectedLiveReadings.length === 0 ? (
+                      <tr><td colSpan={1 + selectedMetrics.length} className="px-5 py-8 text-center text-slate-400">No history found for this device.</td></tr>
+                    ) : selectedLiveReadings.map((reading: SensorReading) => (
+                      <tr key={reading.id} className="hover:bg-[#071f35]/30">
+                        <td className="px-5 py-3 text-slate-300">{new Date(reading.collected_at).toLocaleString()}</td>
+                        {selectedMetrics.map((metric) => <td key={metric.key} className="px-5 py-3 text-white">{formatMetricValue(reading, metric.key)}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'alerts' && (
+            <div className="glass rounded-xl border border-slate-800 overflow-hidden">
+              <div className="p-5 border-b border-slate-800">
+                <h3 className="text-base font-bold text-white">Device Alerts</h3>
+                <p className="mt-1 text-xs text-slate-400">Live alerts from the backend for this device.</p>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {selectedDeviceAlerts.length === 0 ? (
+                  <p className="px-5 py-8 text-center text-slate-400">No alerts found for this device.</p>
+                ) : selectedDeviceAlerts.map((alert: any) => (
+                  <div key={alert.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-[#071f35]/30">
+                    <div>
+                      <p className="font-semibold text-white">{alert.title || alert.message || 'Water Quality Alert'}</p>
+                      <p className="mt-1 text-xs text-slate-400">{alert.metric || 'metric'} • {alert.status}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xs font-bold ${alert.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>{alert.severity}</p>
+                      <p className="mt-1 text-xs text-slate-400">{alert.created_at ? new Date(alert.created_at).toLocaleString() : 'N/A'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="glass rounded-xl p-5 border border-slate-800">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white">Device Settings</h3>
+                  <p className="mt-1 text-xs text-slate-400">Editable display details for the selected device.</p>
+                </div>
+                <button onClick={editSelectedDevice} className="h-9 px-4 rounded-lg bg-[#06b6d4] text-xs font-semibold text-white hover:bg-[#0891b2]">
+                  Edit Type, Group, Firmware
+                </button>
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                {[
+                  ['Type', selectedDevice.type],
+                  ['Group', selectedDevice.pondName],
+                  ['Firmware', selectedDevice.firmware],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-slate-800 bg-[#041526]/50 p-4">
+                    <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+                    <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

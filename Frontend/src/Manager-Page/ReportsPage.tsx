@@ -69,6 +69,13 @@ function formatStatus(status: string | null | undefined) {
 export default function ReportsPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [overview, setOverview] = useState<ManagerOverview | null>(null);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState(() => {
+    const from = new Date();
+    from.setDate(from.getDate() - 7);
+    return from.toISOString().slice(0, 10);
+  });
+  const [dateTo, setDateTo] = useState(todayIso);
 
   useEffect(() => {
     async function loadManagerData() {
@@ -164,6 +171,8 @@ export default function ReportsPage() {
         TotalOwners: totalOwners,
         TotalAgents: totalAgents,
         TotalReadings: summary?.total_readings ?? 0,
+        FromDate: dateFrom,
+        ToDate: dateTo,
       },
       ...deviceRows.map((device) => ({
         Device: device.shortId,
@@ -182,7 +191,22 @@ export default function ReportsPage() {
         subtitle="Detailed reports and insights about your aquaculture operations"
         actions={
           <div className="flex flex-wrap gap-3">
-            <button className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white"><Calendar className="h-5 w-5" /> May 11 - May 17, 2024</button>
+            <div className="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[#0d3660] px-3 py-2 text-sm font-semibold text-white">
+              <Calendar className="h-5 w-5 text-cyan-300" />
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="h-8 rounded border border-[#0d3660] bg-[#020b18] px-2 text-sm text-white outline-none"
+              />
+              <span className="text-slate-400">to</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="h-8 rounded border border-[#0d3660] bg-[#020b18] px-2 text-sm text-white outline-none"
+              />
+            </div>
             <button onClick={exportReport} className="flex h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white"><Download className="h-5 w-5" /> Export Report</button>
           </div>
         }

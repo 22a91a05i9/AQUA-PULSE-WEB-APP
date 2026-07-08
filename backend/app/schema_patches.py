@@ -30,6 +30,88 @@ def apply_schema_patches(engine: Engine) -> None:
                     """
                 )
             )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS agent_contacts (
+                        id INTEGER PRIMARY KEY,
+                        agent_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        name VARCHAR(120) NOT NULL,
+                        email VARCHAR(150),
+                        phone VARCHAR(30),
+                        tag VARCHAR(60),
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS report_schedules (
+                        id INTEGER PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        title VARCHAR(200) NOT NULL,
+                        report_type VARCHAR(50) NOT NULL,
+                        format VARCHAR(20) NOT NULL DEFAULT 'pdf',
+                        frequency VARCHAR(20) NOT NULL DEFAULT 'daily',
+                        time_of_day VARCHAR(5) NOT NULL DEFAULT '08:00',
+                        day_of_week INTEGER,
+                        day_of_month INTEGER,
+                        date_from DATETIME,
+                        date_to DATETIME,
+                        next_run_at DATETIME,
+                        last_run_at DATETIME,
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                        id INTEGER PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        token_hash VARCHAR(128) NOT NULL UNIQUE,
+                        expires_at DATETIME NOT NULL,
+                        used_at DATETIME,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS notification_deliveries (
+                        id INTEGER PRIMARY KEY,
+                        event_type VARCHAR(40) NOT NULL,
+                        channel VARCHAR(20) NOT NULL DEFAULT 'email',
+                        recipient_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        recipient_email VARCHAR(150) NOT NULL,
+                        subject VARCHAR(255) NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        error_message TEXT,
+                        alert_id INTEGER REFERENCES alerts(id) ON DELETE SET NULL,
+                        emergency_id INTEGER REFERENCES emergency_incidents(id) ON DELETE SET NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        sent_at DATETIME
+                    )
+                    """
+                )
+            )
+            emergency_columns = connection.execute(text("PRAGMA table_info(emergency_incidents)")).mappings().all()
+            emergency_column_names = {column["name"] for column in emergency_columns}
+            if "accepted_by_user_id" not in emergency_column_names:
+                connection.execute(text("ALTER TABLE emergency_incidents ADD COLUMN accepted_by_user_id INTEGER REFERENCES users(id)"))
+            if "accepted_at" not in emergency_column_names:
+                connection.execute(text("ALTER TABLE emergency_incidents ADD COLUMN accepted_at DATETIME"))
+            if "owner_viewed_at" not in emergency_column_names:
+                connection.execute(text("ALTER TABLE emergency_incidents ADD COLUMN owner_viewed_at DATETIME"))
             columns = connection.execute(text("PRAGMA table_info(sensor_readings)")).mappings().all()
             column_names = {column["name"] for column in columns}
             needs_rebuild = bool(columns) and (
@@ -125,6 +207,83 @@ def apply_schema_patches(engine: Engine) -> None:
                     """
                 )
             )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS agent_contacts (
+                        id SERIAL PRIMARY KEY,
+                        agent_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        name VARCHAR(120) NOT NULL,
+                        email VARCHAR(150),
+                        phone VARCHAR(30),
+                        tag VARCHAR(60),
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS report_schedules (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        title VARCHAR(200) NOT NULL,
+                        report_type VARCHAR(50) NOT NULL,
+                        format VARCHAR(20) NOT NULL DEFAULT 'pdf',
+                        frequency VARCHAR(20) NOT NULL DEFAULT 'daily',
+                        time_of_day VARCHAR(5) NOT NULL DEFAULT '08:00',
+                        day_of_week INTEGER,
+                        day_of_month INTEGER,
+                        date_from TIMESTAMP,
+                        date_to TIMESTAMP,
+                        next_run_at TIMESTAMP,
+                        last_run_at TIMESTAMP,
+                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        token_hash VARCHAR(128) NOT NULL UNIQUE,
+                        expires_at TIMESTAMP NOT NULL,
+                        used_at TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS notification_deliveries (
+                        id SERIAL PRIMARY KEY,
+                        event_type VARCHAR(40) NOT NULL,
+                        channel VARCHAR(20) NOT NULL DEFAULT 'email',
+                        recipient_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        recipient_email VARCHAR(150) NOT NULL,
+                        subject VARCHAR(255) NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        error_message TEXT,
+                        alert_id INTEGER REFERENCES alerts(id) ON DELETE SET NULL,
+                        emergency_id INTEGER REFERENCES emergency_incidents(id) ON DELETE SET NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        sent_at TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(text("ALTER TABLE emergency_incidents ADD COLUMN IF NOT EXISTS accepted_by_user_id INTEGER REFERENCES users(id)"))
+            connection.execute(text("ALTER TABLE emergency_incidents ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP"))
+            connection.execute(text("ALTER TABLE emergency_incidents ADD COLUMN IF NOT EXISTS owner_viewed_at TIMESTAMP"))
             connection.execute(text("ALTER TABLE sensor_readings ALTER COLUMN ph DROP NOT NULL"))
             connection.execute(text("ALTER TABLE sensor_readings ALTER COLUMN temperature_c DROP NOT NULL"))
             connection.execute(text("ALTER TABLE sensor_readings ALTER COLUMN turbidity_ntu DROP NOT NULL"))

@@ -16,8 +16,9 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
-import { getAuthSession } from '../lib/auth';
+import { changePassword as changeAccountPassword, getAuthSession } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
+import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { RowActionMenu } from '../lib/tableActions';
 
 type SettingsPanel = 'profile' | 'units' | 'timezone' | 'password' | null;
@@ -36,9 +37,12 @@ const SENSOR_UNITS = [
 export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const session = getAuthSession();
   const [ownerData, setOwnerData] = useState<any>(session?.user || null);
+  const [profileForm, setProfileForm] = useState({ full_name: session?.user.name || '', email: session?.user.email || '', phone: '', avatar: '' });
   const [agentsList, setAgentsList] = useState<any[]>([]);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const [message, setMessage] = useState('');
   const [openPanel, setOpenPanel] = useState<SettingsPanel>(null);
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const detectedTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata', []);
   const [selectedTimeZone, setSelectedTimeZone] = useState(detectedTimeZone);
   const { theme, changeTheme } = useTheme();
@@ -54,6 +58,12 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
           });
           if (res.owner) {
             setOwnerData(res.owner);
+            setProfileForm({
+              full_name: res.owner.full_name || res.owner.name || '',
+              email: res.owner.email || '',
+              phone: res.owner.phone || '',
+              avatar: res.owner.profile_json?.avatar || '',
+            });
           }
           if (res.agents) {
             setAgentsList(res.agents);
@@ -110,10 +120,75 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
     }
   };
 
+  const handleProfileImage = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfileForm((current) => ({ ...current, avatar: String(reader.result || '') }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveOwnerProfile = async () => {
+    if (profileForm.phone && !/^\d{10}$/.test(profileForm.phone.trim())) {
+      setMessage('Please enter a valid 10-digit phone number.');
+      return;
+    }
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>('/owner/profile', {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          full_name: profileForm.full_name.trim(),
+          email: profileForm.email.trim(),
+          phone: profileForm.phone.trim() || null,
+          profile_json: { avatar: profileForm.avatar },
+        },
+      });
+      setOwnerData(updated);
+      setProfileForm({
+        full_name: updated.full_name || updated.name || '',
+        email: updated.email || '',
+        phone: updated.phone || '',
+        avatar: updated.profile_json?.avatar || profileForm.avatar,
+      });
+      setMessage('Profile updated successfully.');
+    } catch (err: any) {
+      console.error('Failed to update owner profile:', err);
+      setMessage(err?.message || 'Failed to update profile.');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
+      setMessage('Please fill current password, new password, and confirm password.');
+      return;
+    }
+    if (!isAllowedPassword(passwordForm.next)) {
+      setMessage(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      setMessage('New password and confirm password do not match.');
+      return;
+    }
+    try {
+      const response = await changeAccountPassword(passwordForm.current, passwordForm.next);
+      setPasswordForm({ current: '', next: '', confirm: '' });
+      setMessage(response.message);
+      setOpenPanel(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to change password.');
+    }
+  };
+
   const ownerName = ownerData?.full_name || ownerData?.name || 'Owner User';
   const ownerEmail = ownerData?.email || '';
   const ownerPhone = ownerData?.phone || 'No phone registered';
   const ownerRole = ownerData?.role ? ownerData.role.charAt(0).toUpperCase() + ownerData.role.slice(1) : 'Owner';
+  const visibleAgents = showAllAgents ? agentsList : agentsList.slice(0, 2);
   const timeZoneOptions = [
     detectedTimeZone,
     'Asia/Kolkata',
@@ -138,7 +213,7 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
           onClick={() => togglePanel('profile')}
           className="flex w-full items-center gap-5 rounded-lg p-1 text-left transition hover:bg-[#071f35]/50"
         >
-          <img className="h-16 w-16 rounded-full" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${ownerName}&backgroundColor=0a2a47`} alt={ownerName} />
+          <img className="h-16 w-16 rounded-full object-cover" src={profileForm.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ownerName}&backgroundColor=0a2a47`} alt={ownerName} />
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <p className="text-xl font-bold text-white">{ownerName}</p>
@@ -157,17 +232,21 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
               <UserCog className="h-4 w-4" />
               Edit Profile
             </div>
+            <label className="mb-4 flex w-fit cursor-pointer items-center gap-3 rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-4 py-3 text-sm font-semibold text-cyan-200 hover:border-cyan-400">
+              <img className="h-12 w-12 rounded-full object-cover" src={profileForm.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ownerName}&backgroundColor=0a2a47`} alt={ownerName} />
+              Edit Profile Picture
+              <input type="file" accept="image/*" className="hidden" onChange={(event) => handleProfileImage(event.target.files?.[0] || null)} />
+            </label>
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Full Name" value={ownerName} />
-              <Field label="Role" value={ownerRole} />
-              <Field label="Email" value={ownerEmail || 'No email registered'} />
-              <Field label="Phone" value={ownerPhone} />
+              <Field label="Full Name" value={profileForm.full_name} onChange={(value) => setProfileForm((current) => ({ ...current, full_name: value }))} />
+              <Field label="Role" value={ownerRole} readOnly />
+              <Field label="Email" value={profileForm.email} onChange={(value) => setProfileForm((current) => ({ ...current, email: value }))} />
+              <Field label="Phone" value={profileForm.phone} onChange={(value) => setProfileForm((current) => ({ ...current, phone: value.replace(/\D/g, '').slice(0, 10) }))} />
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button onClick={() => setMessage('Profile edit form is ready to connect.')} className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700">
+              <button onClick={saveOwnerProfile} className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700">
                 Save Profile
               </button>
-              <p className="text-sm text-slate-400">Connect this form to the owner profile API when available.</p>
             </div>
           </div>
         )}
@@ -185,7 +264,7 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
           </button>
         </div>
         <div className="divide-y divide-[#0d3660]/70">
-          {agentsList.map((member) => (
+          {visibleAgents.map((member) => (
             <div key={member.email} className="grid grid-cols-[1fr_1.3fr_0.9fr_0.35fr_40px] items-center gap-4 py-4">
               <div className="flex items-center gap-4">
                 <img className="h-11 w-11 rounded-full" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.full_name || member.name}&backgroundColor=0a2a47`} alt={member.full_name || member.name} />
@@ -203,8 +282,8 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
             <p className="py-4 text-sm text-slate-400">No agents registered under this owner yet.</p>
           )}
         </div>
-        <button onClick={() => setMessage('Team agents list opened.')} className="mt-3 flex items-center gap-2 text-sm text-white">
-          {t('View all team Agents')} <ArrowRight className="h-4 w-4" />
+        <button onClick={() => setShowAllAgents((value) => !value)} className="mt-3 flex items-center gap-2 text-sm text-white">
+          {showAllAgents ? 'Show fewer team Agents' : t('View all team Agents')} <ArrowRight className="h-4 w-4" />
         </button>
       </section>
 
@@ -299,10 +378,10 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
         {openPanel === 'password' && (
           <div className="px-10 pb-5">
             <div className="grid gap-4 rounded-lg border border-[#0d3660] bg-[#031528]/60 p-5 md:grid-cols-3">
-              <PasswordField label="Current Password" />
-              <PasswordField label="New Password" />
-              <PasswordField label="Confirm Password" />
-              <button onClick={() => setMessage('Password change form is ready to connect.')} className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 md:w-fit">
+              <PasswordField label="Current Password" value={passwordForm.current} onChange={(value) => setPasswordForm((current) => ({ ...current, current: value }))} />
+              <PasswordField label="New Password" value={passwordForm.next} onChange={(value) => setPasswordForm((current) => ({ ...current, next: value }))} />
+              <PasswordField label="Confirm Password" value={passwordForm.confirm} onChange={(value) => setPasswordForm((current) => ({ ...current, confirm: value }))} />
+              <button onClick={handleChangePassword} className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 md:w-fit">
                 Update Password
               </button>
             </div>
@@ -320,20 +399,25 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, onChange, readOnly }: { label: string; value: string; onChange?: (value: string) => void; readOnly?: boolean }) {
   return (
     <label className="space-y-2 text-sm text-slate-300">
       {label}
-      <input defaultValue={value} className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-3 text-white outline-none focus:border-cyan-400" />
+      <input
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
+        readOnly={readOnly}
+        className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-3 text-white outline-none focus:border-cyan-400 read-only:opacity-80"
+      />
     </label>
   );
 }
 
-function PasswordField({ label }: { label: string }) {
+function PasswordField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="space-y-2 text-sm text-slate-300">
       {label}
-      <input type="password" className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-3 text-white outline-none" />
+      <input type="password" value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-3 text-white outline-none" />
     </label>
   );
 }

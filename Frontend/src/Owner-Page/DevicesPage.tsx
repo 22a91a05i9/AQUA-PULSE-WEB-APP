@@ -7,7 +7,6 @@ import {
   Download,
   Filter,
   MapPin,
-  MoreVertical,
   Search,
   SignalHigh,
   UserRound,

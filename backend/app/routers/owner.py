@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.db import get_db
 from app.deps import require_role
-from app.models import Alert, Device, DeviceOwnerAssignment, DeviceSiteAssignment, FarmType, Reading, Site, SiteAgentAssignment, Species, User
+from app.models import Alert, Device, DeviceOwnerAssignment, DeviceSiteAssignment, FarmType, Reading, Site, SiteAgentAssignment, Species, User, UserSetting
 from app.schemas import (
     AgentCreate,
     AssignAgentRequest,
@@ -16,6 +16,7 @@ from app.schemas import (
     SiteCreate,
     SiteOut,
     UserOut,
+    validate_password_policy,
 )
 
 
@@ -73,8 +74,12 @@ def owner_overview(
             d_dict["latest_reading"] = None
         devices_data.append(d_dict)
 
+    owner_dict = UserOut.model_validate(current_user).model_dump()
+    owner_setting = db.scalar(select(UserSetting).where(UserSetting.user_id == current_user.id))
+    owner_dict["profile_json"] = owner_setting.profile_json if owner_setting else None
+
     return {
-        "owner": UserOut.model_validate(current_user),
+        "owner": owner_dict,
         "stats": {
             "devices": len(devices),
             "sites": len(sites),
@@ -140,6 +145,7 @@ def create_agent(
     existing = db.scalar(select(User).where(User.email == payload.email))
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+    phone = validate_agent_phone(db, payload.phone)
 
     farm_type = db.scalar(select(FarmType).where(FarmType.id == payload.farm_type_id))
     species = db.scalar(select(Species).where(Species.id == payload.species_id))
@@ -150,7 +156,7 @@ def create_agent(
         role="agent",
         full_name=payload.full_name,
         email=payload.email,
-        phone=payload.phone,
+        phone=phone,
         password_hash=hash_password(payload.password),
         owner_user_id=current_user.id,
         created_by_id=current_user.id,
@@ -178,6 +184,16 @@ def create_site(
     current_user: User = Depends(require_role("owner")),
     db: Session = Depends(get_db),
 ):
+    existing_site = db.scalar(
+        select(Site).where(
+            Site.owner_user_id == current_user.id,
+            func.lower(func.trim(Site.name)) == payload.name.strip().lower(),
+            func.lower(func.trim(func.coalesce(Site.location_text, ""))) == (payload.location_text or "").strip().lower(),
+        )
+    )
+    if existing_site:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Site already created.")
+
     farm_type = db.scalar(select(FarmType).where(FarmType.id == payload.farm_type_id))
     species = db.scalar(select(Species).where(Species.id == payload.species_id))
     if not farm_type or not species or species.farm_type_id != farm_type.id:
@@ -287,12 +303,34 @@ def assign_agent_to_site(
 
 
 from pydantic import BaseModel, EmailStr
+import re
+
+PHONE_PATTERN = re.compile(r"^\d{10}$")
+
+
+def validate_agent_phone(db: Session, phone: str | None, exclude_user_id: int | None = None) -> str:
+    normalized = (phone or "").strip()
+    if not PHONE_PATTERN.fullmatch(normalized):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please enter a valid 10-digit phone number.")
+    duplicate_query = select(User).where(User.phone == normalized)
+    if exclude_user_id is not None:
+        duplicate_query = duplicate_query.where(User.id != exclude_user_id)
+    if db.scalar(duplicate_query):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already exists.")
+    return normalized
 
 class AgentUpdate(BaseModel):
     full_name: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
     password: str | None = None
+
+
+class OwnerProfileUpdate(BaseModel):
+    full_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    profile_json: dict | None = None
 
 class SiteUpdate(BaseModel):
     name: str | None = None
@@ -302,6 +340,38 @@ class SiteUpdate(BaseModel):
 class DeviceUpdatePayload(BaseModel):
     firmware_version: str | None = None
     status: str | None = None
+
+
+@router.put("/profile")
+def update_owner_profile(
+    payload: OwnerProfileUpdate,
+    current_user: User = Depends(require_role("owner")),
+    db: Session = Depends(get_db),
+):
+    if payload.email is not None and payload.email != current_user.email:
+        existing_email = db.scalar(select(User).where(User.email == payload.email, User.id != current_user.id))
+        if existing_email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+        current_user.email = payload.email
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name
+    if payload.phone is not None:
+        current_user.phone = validate_agent_phone(db, payload.phone, exclude_user_id=current_user.id)
+    if payload.profile_json is not None:
+        setting = db.scalar(select(UserSetting).where(UserSetting.user_id == current_user.id))
+        if not setting:
+            setting = UserSetting(user_id=current_user.id)
+            db.add(setting)
+        setting.profile_json = {
+            **(setting.profile_json or {}),
+            **payload.profile_json,
+        }
+    db.commit()
+    db.refresh(current_user)
+    result = UserOut.model_validate(current_user).model_dump()
+    if payload.profile_json is not None:
+        result["profile_json"] = payload.profile_json
+    return result
 
 
 @router.delete("/agents/{agent_id}")
@@ -346,9 +416,13 @@ def update_agent(
     if payload.email is not None:
         agent.email = payload.email
     if payload.phone is not None:
-        agent.phone = payload.phone
+        agent.phone = validate_agent_phone(db, payload.phone, exclude_user_id=agent.id)
     if payload.password is not None:
-        agent.password_hash = hash_password(payload.password)
+        try:
+            validated_password = validate_password_policy(payload.password)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        agent.password_hash = hash_password(validated_password or payload.password)
     db.commit()
     db.refresh(agent)
     return UserOut.model_validate(agent)
@@ -414,16 +488,14 @@ def delete_device(
     )
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    db.execute(delete(Alert).where(Alert.device_id == device.id))
-    db.execute(delete(Reading).where(Reading.device_id == device.id))
     db.execute(delete(DeviceSiteAssignment).where(DeviceSiteAssignment.device_id == device.id))
     db.execute(delete(DeviceOwnerAssignment).where(DeviceOwnerAssignment.device_id == device.id))
-    # Unassign owner and site
+    # Keep readings and alerts as historical data; only remove active ownership/site links.
     device.owner_user_id = None
     device.site_id = None
     device.status = "inactive"
     db.commit()
-    return {"message": "Device unassigned and deleted from owner successfully"}
+    return {"message": "Device unassigned successfully. Historical readings were preserved."}
 
 @router.put("/devices/{device_id}")
 def update_device(

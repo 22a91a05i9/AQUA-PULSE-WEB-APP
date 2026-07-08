@@ -175,7 +175,7 @@ function OwnerPageContent({
     case 'devices':
       return <DevicesPage />;
     case 'live':
-      return <LiveMonitoringPage />;
+      return <LiveMonitoringPage onNavigate={onNavigate} />;
     case 'assignments':
       return <AssignmentsPage />;
     case 'alerts':
@@ -185,7 +185,7 @@ function OwnerPageContent({
     case 'sos':
       return <SosEmergencyPage onBackToDashboard={() => onNavigate('dashboard')} />;
     case 'analytics':
-      return <AnalyticsPage />;
+      return <AnalyticsPage onNavigate={onNavigate} />;
     case 'reports':
       return <ReportsPage />;
     case 'settings':

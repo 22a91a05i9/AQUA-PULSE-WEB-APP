@@ -88,6 +88,7 @@ export default function AssignmentsPage() {
   const devices: Device[] = data?.devices || [];
   const owners: Owner[] = data?.owners || [];
   const assignedDevices = devices.filter((d) => d.owner_user_id !== null);
+  const unassignedDevices = devices.filter((d) => d.owner_user_id === null);
 
   return (
     <div className="space-y-8">
@@ -115,16 +116,18 @@ export default function AssignmentsPage() {
                   onChange={(e) => setSelectedDeviceId(e.target.value)}
                   className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none transition focus:border-cyan-300"
                 >
-                  <option value="">Select device</option>
-                  {devices.map((d) => {
-                    const owner = owners.find((o) => o.id === d.owner_user_id);
-                    const labelSuffix = owner ? ` (Assigned to ${owner.full_name})` : ' (Unassigned)';
-                    return (
-                      <option key={d.id} value={d.id}>
-                        {d.device_uid}{labelSuffix}
-                      </option>
-                    );
-                  })}
+                  {unassignedDevices.length === 0 ? (
+                    <option value="">No unassigned devices available</option>
+                  ) : (
+                    <>
+                      <option value="">Select device</option>
+                      {unassignedDevices.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.device_uid}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </label>
 
@@ -144,7 +147,7 @@ export default function AssignmentsPage() {
                 </select>
               </label>
 
-              <PrimaryButton onClick={handleAssign}>
+              <PrimaryButton onClick={handleAssign} disabled={submitLoading || unassignedDevices.length === 0}>
                 {submitLoading ? 'Assigning...' : 'Assign Device'}
               </PrimaryButton>
             </div>

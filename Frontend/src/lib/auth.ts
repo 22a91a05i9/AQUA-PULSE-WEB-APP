@@ -10,6 +10,14 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface ForgotPasswordResponse {
+  message: string;
+  reset_token?: string | null;
+  expires_at?: string | null;
+  email_sent?: boolean;
+  smtp_configured?: boolean;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -98,11 +106,44 @@ export async function login(credentials: LoginCredentials): Promise<AuthSession>
 
   const response = await apiRequest<BackendLoginResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify(credentials),
+    body: credentials,
   });
   const session = normalizeLoginResponse(response, credentials.email);
   saveAuthSession(session);
   return session;
+}
+
+export async function requestPasswordReset(email: string): Promise<ForgotPasswordResponse> {
+  return apiRequest<ForgotPasswordResponse>('/auth/password-reset/request', {
+    method: 'POST',
+    body: { email },
+  });
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/auth/password-reset/confirm', {
+    method: 'POST',
+    body: {
+      token,
+      new_password: newPassword,
+    },
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  const session = getAuthSession();
+  if (!session) {
+    throw new Error('Please log in again before changing your password.');
+  }
+
+  return apiRequest<{ message: string }>('/auth/change-password', {
+    method: 'POST',
+    token: session.token,
+    body: {
+      current_password: currentPassword,
+      new_password: newPassword,
+    },
+  });
 }
 
 export async function logout() {

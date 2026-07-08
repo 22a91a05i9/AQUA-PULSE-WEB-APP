@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  FilePlus2,
   FileText,
   Filter,
   LineChart,
@@ -207,10 +206,6 @@ export default function ReportsPage() {
       <section className="glass rounded-lg p-5">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">Popular Reports</h2>
-          <button className="flex h-10 items-center gap-2 rounded-md border border-[#0d3660] bg-[#031426]/70 px-4 text-sm text-white transition hover:border-cyan-400">
-            <FilePlus2 className="h-4 w-4" />
-            Custom Report
-          </button>
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">

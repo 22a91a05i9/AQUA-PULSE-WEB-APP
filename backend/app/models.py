@@ -241,6 +241,26 @@ class Alert(Base):
     recipient: Mapped["User"] = relationship("User", foreign_keys=[recipient_user_id], backref="alerts")
 
 
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    channel: Mapped[str] = mapped_column(String(20), default="email")
+    recipient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    recipient_email: Mapped[str] = mapped_column(String(150))
+    subject: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_id: Mapped[int | None] = mapped_column(ForeignKey("alerts.id"), nullable=True)
+    emergency_id: Mapped[int | None] = mapped_column(ForeignKey("emergency_incidents.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    recipient: Mapped["User"] = relationship("User")
+    alert: Mapped["Alert | None"] = relationship("Alert")
+
+
 class Report(Base):
     __tablename__ = "reports"
 
@@ -257,6 +277,29 @@ class Report(Base):
     user: Mapped["User"] = relationship("User", backref="reports")
 
 
+class ReportSchedule(Base):
+    __tablename__ = "report_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    title: Mapped[str] = mapped_column(String(200))
+    report_type: Mapped[str] = mapped_column(String(50))
+    format: Mapped[str] = mapped_column(String(20), default="pdf")
+    frequency: Mapped[str] = mapped_column(String(20), default="daily")
+    time_of_day: Mapped[str] = mapped_column(String(5), default="08:00")
+    day_of_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    date_from: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    date_to: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", backref="report_schedules")
+
+
 class UserSetting(Base):
     __tablename__ = "user_settings"
 
@@ -270,6 +313,34 @@ class UserSetting(Base):
     user: Mapped["User"] = relationship("User", backref="settings")
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", backref="password_reset_tokens")
+
+
+class AgentContact(Base):
+    __tablename__ = "agent_contacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agent_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    tag: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent: Mapped["User"] = relationship("User", foreign_keys=[agent_user_id], backref="agent_contacts")
+
+
 class EmergencyIncident(Base):
     __tablename__ = "emergency_incidents"
 
@@ -279,10 +350,14 @@ class EmergencyIncident(Base):
     priority: Mapped[str] = mapped_column(String(20), default="high")
     status: Mapped[str] = mapped_column(String(20), default="active")
     description: Mapped[str] = mapped_column(Text)
+    owner_viewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    accepted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     resolved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     site: Mapped["Site | None"] = relationship("Site")
     triggered_by: Mapped["User"] = relationship("User", foreign_keys=[triggered_by_user_id])
+    accepted_by: Mapped["User | None"] = relationship("User", foreign_keys=[accepted_by_user_id])
     resolved_by: Mapped["User | None"] = relationship("User", foreign_keys=[resolved_by_user_id])

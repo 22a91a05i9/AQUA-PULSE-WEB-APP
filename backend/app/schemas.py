@@ -1,9 +1,33 @@
 from datetime import datetime
 
+import re
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 VALID_SENSOR_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8}
+VALID_DEVICE_VERSIONS = {"1.0", "2.0", "3.0", "4.0"}
+DEFAULT_ALLOWED_PASSWORD = "12345678"
+PASSWORD_POLICY_MESSAGE = (
+    "Password must be 12345678 or at least 8 characters with one letter, "
+    "one number, and one special character."
+)
+
+
+def validate_password_policy(value: str | None) -> str | None:
+    if value is None:
+        return value
+
+    password = value.strip()
+    if password == DEFAULT_ALLOWED_PASSWORD:
+        return password
+
+    has_letter = bool(re.search(r"[A-Za-z]", password))
+    has_number = bool(re.search(r"\d", password))
+    has_special = bool(re.search(r"[^A-Za-z0-9]", password))
+    if len(password) < 8 or not (has_letter and has_number and has_special):
+        raise ValueError(PASSWORD_POLICY_MESSAGE)
+    return password
 
 
 class UserOut(BaseModel):
@@ -31,11 +55,52 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: str | None = None
+    expires_at: datetime | None = None
+    email_sent: bool = False
+    smtp_configured: bool = False
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20)
+    new_password: str = Field(min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        return validate_password_policy(value) or value
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        return validate_password_policy(value) or value
+
+
 class OwnerCreate(BaseModel):
     full_name: str
     email: EmailStr
     phone: str | None = None
     password: str = Field(min_length=8)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return validate_password_policy(value) or value
 
 
 class OwnerUpdate(BaseModel):
@@ -43,6 +108,11 @@ class OwnerUpdate(BaseModel):
     email: EmailStr
     phone: str | None = None
     password: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str | None) -> str | None:
+        return validate_password_policy(value)
 
 
 class AgentCreate(BaseModel):
@@ -52,6 +122,11 @@ class AgentCreate(BaseModel):
     password: str = Field(min_length=8)
     farm_type_id: int
     species_id: int
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return validate_password_policy(value) or value
 
 
 class DeviceCreate(BaseModel):
@@ -66,7 +141,40 @@ class DeviceCreate(BaseModel):
     @field_validator("device_uid")
     @classmethod
     def trim_device_uid(cls, value: str) -> str:
-        return value.strip()
+        trimmed = value.strip()
+        if not re.fullmatch(r"\d+", trimmed):
+            raise ValueError("Device ID must contain numbers only")
+        return trimmed
+
+    @field_validator("imei")
+    @classmethod
+    def validate_imei(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        trimmed = value.strip()
+        if not re.fullmatch(r"\d{1,10}", trimmed):
+            raise ValueError("IMEI Number must contain numbers only, up to 10 digits")
+        return trimmed
+
+    @field_validator("sim_number")
+    @classmethod
+    def validate_sim_number(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        trimmed = value.strip()
+        if not re.fullmatch(r"\d{10}", trimmed):
+            raise ValueError("SIM Number must be exactly 10 digits")
+        return trimmed
+
+    @field_validator("firmware_version")
+    @classmethod
+    def validate_firmware_version(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        trimmed = value.strip()
+        if trimmed not in VALID_DEVICE_VERSIONS:
+            raise ValueError("Device type must be one of: 1.0, 2.0, 3.0, 4.0")
+        return trimmed
 
     @field_validator("sensor_type_ids")
     @classmethod
@@ -283,6 +391,53 @@ class ReportOut(BaseModel):
     created_at: datetime
 
 
+class ReportScheduleCreate(BaseModel):
+    title: str
+    report_type: str
+    format: str = "pdf"
+    frequency: str = "daily"
+    time_of_day: str = "08:00"
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    is_active: bool = True
+
+
+class ReportScheduleUpdate(BaseModel):
+    title: str | None = None
+    report_type: str | None = None
+    format: str | None = None
+    frequency: str | None = None
+    time_of_day: str | None = None
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    is_active: bool | None = None
+
+
+class ReportScheduleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    title: str
+    report_type: str
+    format: str
+    frequency: str
+    time_of_day: str
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 # ---------- UserSetting ----------
 
 class UserSettingUpdate(BaseModel):
@@ -302,6 +457,29 @@ class UserSettingOut(BaseModel):
     updated_at: datetime
 
 
+class AgentContactCreate(BaseModel):
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    tag: str | None = None
+
+
+class AgentContactUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    tag: str | None = None
+
+
+class AgentContactOut(BaseModel):
+    id: int
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    tag: str | None = None
+    readonly: bool = False
+
+
 # ---------- EmergencyIncident ----------
 
 class EmergencyCreate(BaseModel):
@@ -319,6 +497,38 @@ class EmergencyOut(BaseModel):
     priority: str
     status: str
     description: str
+    owner_viewed_at: datetime | None = None
+    accepted_by_user_id: int | None = None
+    accepted_at: datetime | None = None
     resolved_by_user_id: int | None = None
     created_at: datetime
     resolved_at: datetime | None = None
+
+
+class NotificationDeliveryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_type: str
+    channel: str
+    recipient_user_id: int
+    recipient_email: str
+    subject: str
+    status: str
+    error_message: str | None = None
+    alert_id: int | None = None
+    emergency_id: int | None = None
+    created_at: datetime
+    sent_at: datetime | None = None
+
+
+class EmergencyDetailOut(EmergencyOut):
+    triggered_by_name: str | None = None
+    triggered_by_email: str | None = None
+    triggered_by_role: str | None = None
+    site_name: str | None = None
+    owner_name: str | None = None
+    owner_email: str | None = None
+    accepted_by_name: str | None = None
+    accepted_by_email: str | None = None
+    deliveries: list[NotificationDeliveryOut] = Field(default_factory=list)

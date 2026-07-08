@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from sqlalchemy import inspect
 from app.core.config import settings
 from app.db import SessionLocal, engine
 from app.routers import agent, analytics, auth, emergencies, manager, meta, owner, readings, reports, user_settings
+from app.schema_patches import apply_schema_patches
 from app.seed_data import seed_database
 
 logger = logging.getLogger(__name__)
@@ -35,12 +37,31 @@ def schema_ready() -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     mqtt_client = None
+    schedule_task = None
     if schema_ready():
+        apply_schema_patches(engine)
         db = SessionLocal()
         try:
             seed_database(db)
         finally:
             db.close()
+
+        async def schedule_loop():
+            from app.routers.reports import run_due_report_schedules
+
+            while True:
+                await asyncio.sleep(60)
+                db = SessionLocal()
+                try:
+                    generated = run_due_report_schedules(db)
+                    if generated:
+                        logger.info("Generated %s scheduled reports", generated)
+                except Exception:
+                    logger.exception("Scheduled report generation failed")
+                finally:
+                    db.close()
+
+        schedule_task = asyncio.create_task(schedule_loop())
     else:
         logger.warning("Database schema is not ready. Run the database bootstrap command before serving traffic.")
 
@@ -55,6 +76,8 @@ async def lifespan(app: FastAPI):
         from app.mqtt_consumer import stop_listener
 
         stop_listener(mqtt_client)
+    if schedule_task is not None:
+        schedule_task.cancel()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

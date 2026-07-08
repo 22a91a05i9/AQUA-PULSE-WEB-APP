@@ -37,7 +37,6 @@ export const managerNavItems = [
   { id: 'reports', label: 'Reports', icon: FileText },
   { id: 'settings', label: 'Settings', icon: Settings },
   { id: 'alerts', label: 'Alerts', icon: Bell, badge: 12, separated: true },
-  { id: 'sos', label: 'SOS Emergency', icon: Shield },
 ];
 
 export const owners = [

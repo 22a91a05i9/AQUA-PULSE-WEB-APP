@@ -321,7 +321,7 @@ export default function DashboardPage({ onNavigate }: { onNavigate?: (page: stri
               onClick={() => onNavigate?.('alerts')}
               className="text-sm text-[#06b6d4] hover:text-[#22d3ee] transition-colors"
             >
-              View All
+              View All Alerts
             </button>
           </div>
           <div className="space-y-3">

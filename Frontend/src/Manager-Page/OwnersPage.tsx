@@ -4,6 +4,7 @@ import { owners as defaultOwners } from './data';
 import { Panel, PrimaryButton, StatCard, StatusBadge, TablePager } from './components';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
 
 interface OwnerRecord {
@@ -107,7 +108,8 @@ export default function OwnersPage() {
 
 
   const updateForm = (field: keyof typeof form, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    const nextValue = field === 'phone' ? value.replace(/\D/g, '').slice(0, 10) : value;
+    setForm((current) => ({ ...current, [field]: nextValue }));
     setMessage('');
   };
 
@@ -116,8 +118,31 @@ export default function OwnersPage() {
       setMessage('Enter name, email, and phone before saving an owner.');
       return;
     }
+    if (!/^\d{10}$/.test(form.phone.trim())) {
+      setMessage('Please enter a valid 10-digit phone number.');
+      return;
+    }
+    if (!/^[^\s@]+@gmail\.com$/i.test(form.email.trim())) {
+      setMessage('Please enter a valid @gmail.com email address.');
+      return;
+    }
+    const normalizedEmail = form.email.trim().toLowerCase();
+    const duplicateEmail = ownerList.some((owner) => owner.id !== editingOwnerId && owner.email.toLowerCase() === normalizedEmail);
+    if (duplicateEmail) {
+      setMessage('Email already exists.');
+      return;
+    }
+    const duplicatePhone = ownerList.some((owner) => owner.id !== editingOwnerId && owner.phone === form.phone.trim());
+    if (duplicatePhone) {
+      setMessage('Phone number already exists.');
+      return;
+    }
 
     const password = form.password.trim() || 'AquaOwner@2026';
+    if (!isAllowedPassword(password)) {
+      setMessage(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
 
     try {
       const session = getAuthSession();
@@ -302,7 +327,9 @@ export default function OwnersPage() {
                 <input
                   value={form.phone}
                   onChange={(e) => updateForm('phone', e.target.value)}
-                  placeholder="e.g. +91 9876543212"
+                  placeholder="e.g. 9876543212"
+                  maxLength={10}
+                  inputMode="numeric"
                   className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300"
                 />
               </label>
@@ -317,7 +344,7 @@ export default function OwnersPage() {
                 />
               </label>
               {message && (
-                <p className={`text-sm font-semibold ${message.includes('success') ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <p className={`text-sm font-semibold ${message.includes('success') ? 'text-emerald-400' : 'text-red-300'}`}>
                   {message}
                 </p>
               )}

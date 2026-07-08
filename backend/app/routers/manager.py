@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, func, or_, select
@@ -33,6 +34,64 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/manager", tags=["manager"])
+
+PHONE_PATTERN = re.compile(r"^\d{10}$")
+GMAIL_PATTERN = re.compile(r"^[^\s@]+@gmail\.com$", re.IGNORECASE)
+DEVICE_UID_PATTERN = re.compile(r"^\d+$")
+IMEI_PATTERN = re.compile(r"^\d{1,10}$")
+SIM_PATTERN = re.compile(r"^\d{10}$")
+DEVICE_VERSIONS = {"1.0", "2.0", "3.0", "4.0"}
+
+
+def validate_owner_contact(db: Session, email: str, phone: str | None, owner_id: int | None = None) -> None:
+    normalized_email = email.strip().lower()
+    normalized_phone = (phone or "").strip()
+    if not GMAIL_PATTERN.fullmatch(normalized_email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please enter a valid @gmail.com email address.")
+    if not PHONE_PATTERN.fullmatch(normalized_phone):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please enter a valid 10-digit phone number.")
+
+    email_query = select(User).where(func.lower(User.email) == normalized_email)
+    phone_query = select(User).where(User.phone == normalized_phone)
+    if owner_id is not None:
+        email_query = email_query.where(User.id != owner_id)
+        phone_query = phone_query.where(User.id != owner_id)
+
+    if db.scalar(email_query):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists.")
+    if db.scalar(phone_query):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already exists.")
+
+
+def validate_device_payload(db: Session, payload: DeviceCreate, device_id: int | None = None) -> None:
+    required_values = [
+        payload.device_uid,
+        payload.firmware_version,
+        payload.status,
+        payload.imei,
+        payload.sim_number,
+    ]
+    if any(not str(value or "").strip() for value in required_values):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please fill all required fields.")
+    if not DEVICE_UID_PATTERN.fullmatch(payload.device_uid):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device ID must contain numbers only.")
+    if not IMEI_PATTERN.fullmatch(payload.imei or ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="IMEI Number must contain numbers only, up to 10 digits.")
+    if not SIM_PATTERN.fullmatch(payload.sim_number or ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SIM Number must be exactly 10 digits.")
+    if payload.firmware_version not in DEVICE_VERSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device type must be one of: 1.0, 2.0, 3.0, 4.0.")
+
+    duplicate_queries = [
+        (select(Device).where(Device.device_uid == payload.device_uid), "Device ID already exists."),
+        (select(Device).where(Device.imei == payload.imei), "IMEI Number already exists."),
+        (select(Device).where(Device.sim_number == payload.sim_number), "SIM Number already exists."),
+    ]
+    for query, detail in duplicate_queries:
+        if device_id is not None:
+            query = query.where(Device.id != device_id)
+        if db.scalar(query):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 def replace_device_sensors(db: Session, device: Device, sensor_type_ids: list[int]) -> None:
@@ -98,15 +157,13 @@ def create_owner(
     current_user: User = Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    existing = db.scalar(select(User).where(User.email == payload.email))
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+    validate_owner_contact(db, payload.email, payload.phone)
 
     owner = User(
         role="owner",
         full_name=payload.full_name,
-        email=payload.email,
-        phone=payload.phone,
+        email=payload.email.strip().lower(),
+        phone=(payload.phone or "").strip(),
         password_hash=hash_password(payload.password),
         created_by_id=current_user.id,
     )
@@ -136,13 +193,11 @@ def update_owner(
     if not owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found")
 
-    existing = db.scalar(select(User).where(User.email == payload.email, User.id != owner_id))
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+    validate_owner_contact(db, payload.email, payload.phone, owner_id)
 
     owner.full_name = payload.full_name
-    owner.email = payload.email
-    owner.phone = payload.phone
+    owner.email = payload.email.strip().lower()
+    owner.phone = (payload.phone or "").strip()
     if payload.password:
         owner.password_hash = hash_password(payload.password)
     db.commit()
@@ -186,9 +241,7 @@ def create_device(
     current_user: User = Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    existing = db.scalar(select(Device).where(Device.device_uid == payload.device_uid))
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device ID already exists")
+    validate_device_payload(db, payload)
 
     device = Device(
         device_uid=payload.device_uid,
@@ -227,9 +280,7 @@ def update_device(
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
-    existing = db.scalar(select(Device).where(Device.device_uid == payload.device_uid, Device.id != device_id))
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device ID already exists")
+    validate_device_payload(db, payload, device_id)
 
     device.device_uid = payload.device_uid
     device.imei = payload.imei
@@ -253,14 +304,16 @@ def delete_device(
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
-    db.execute(delete(Alert).where(Alert.device_id == device_id))
-    db.execute(delete(Reading).where(Reading.device_id == device_id))
     db.execute(delete(DeviceSensorAssignment).where(DeviceSensorAssignment.device_id == device_id))
     db.execute(delete(DeviceSiteAssignment).where(DeviceSiteAssignment.device_id == device_id))
     db.execute(delete(DeviceOwnerAssignment).where(DeviceOwnerAssignment.device_id == device_id))
-    db.delete(device)
+    # Preserve historical readings and alerts. The delete action retires the device
+    # from active use instead of hard-deleting records referenced by history.
+    device.owner_user_id = None
+    device.site_id = None
+    device.status = "inactive"
     db.commit()
-    return {"message": "Device deleted successfully"}
+    return {"message": "Device deactivated successfully. Historical readings were preserved."}
 
 
 @router.post("/devices/{device_id}/assign-owner", response_model=DeviceOut)
@@ -277,6 +330,8 @@ def assign_device_to_owner(
     owner = db.scalar(select(User).where(User.id == payload.owner_user_id, User.role == "owner"))
     if not owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found")
+    if device.owner_user_id is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device already assigned to an owner")
 
     active_assignments = db.scalars(
         select(DeviceOwnerAssignment).where(

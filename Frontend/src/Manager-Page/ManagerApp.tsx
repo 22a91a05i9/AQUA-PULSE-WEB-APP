@@ -9,7 +9,6 @@ import OwnersPage from './OwnersPage';
 import ReportsPage from './ReportsPage';
 import SettingsPage from './SettingsPage';
 import AlertsPage from './AlertsPage';
-import SosEmergencyPage from '../Agent-Page/SosEmergencyPage';
 
 export default function ManagerApp({ session, onLogout }: { session: AuthSession; onLogout: () => void }) {
   const [currentPage, setCurrentPage] = useState<ManagerPageId>('dashboard');
@@ -45,8 +44,6 @@ function ManagerPageContent({
       return <SettingsPage />;
     case 'alerts':
       return <AlertsPage />;
-    case 'sos':
-      return <SosEmergencyPage onBackToDashboard={() => onNavigate('dashboard')} />;
     default:
       return <DashboardPage onNavigate={onNavigate} />;
   }

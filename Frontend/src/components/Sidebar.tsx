@@ -11,8 +11,6 @@ import {
   Settings,
   HelpCircle,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
   Fish,
 } from 'lucide-react';
 import { useTranslation } from '../lib/i18n';
@@ -71,17 +69,6 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
           </div>
         )}
       </div>
-
-      {/* Collapse button */}
-      <button
-        onClick={() => {
-          setAnimating(true);
-          setCollapsed(!collapsed);
-        }}
-        className="absolute -right-3 top-24 w-6 h-6 rounded-full bg-[#0d3660] border border-[#0a2a47] flex items-center justify-center text-[#06b6d4] hover:bg-[#06b6d4] hover:text-white transition-all z-50"
-      >
-        {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-      </button>
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto overflow-x-hidden">

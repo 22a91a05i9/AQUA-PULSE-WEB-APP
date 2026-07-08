@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   Settings,
-  Wrench,
-  MessageSquare,
-  Image,
-  Clock,
   Lock,
   Shield,
   FileText,
@@ -17,25 +13,26 @@ import {
   MessageCircle,
   Megaphone,
   Phone,
-  MoreVertical,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
-import { getAuthSession } from '../lib/auth';
+import { changePassword as changeAccountPassword, getAuthSession } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
+import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { RowActionMenu } from '../lib/tableActions';
 
 const securityItems = [
   { label: 'Change Password', desc: 'Update your account password', icon: Lock },
-  { label: 'Two-Factor Authentication', desc: 'Add an extra layer of security', icon: Shield },
   { label: 'Privacy Policy', desc: 'View our privacy policy', icon: FileText, external: true },
 ];
 
-const alertContacts = [
-  { name: 'Rahul Verma', email: 'rahul.verma@aquapulse.com', phone: '+91 98765 43210', tag: 'Primary Contact' },
-  { name: 'Priya Sharma', email: 'priya.sharma@aquapulse.com', phone: '+91 87654 32109', tag: null },
-  { name: 'Arjun Mehta', email: 'arjun.mehta@aquapulse.com', phone: '+91 76543 21098', tag: null },
-  { name: 'Sneha Reddy', email: 'sneha.reddy@aquapulse.com', phone: '+91 65432 10987', tag: null },
-];
+interface ContactItem {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  tag?: string | null;
+  readonly?: boolean;
+}
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
@@ -56,6 +53,13 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const { theme, changeTheme } = useTheme();
   const { t, lang, changeLanguage } = useTranslation();
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
+  const [profileForm, setProfileForm] = useState({ full_name: '', email: '', phone: '', avatarUrl: '' });
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
+  const [passwordMessage, setPasswordMessage] = useState('');
 
   async function loadSettings() {
     try {
@@ -65,6 +69,16 @@ export default function SettingsPage() {
           token: session.token,
         });
         setData(res);
+        setProfileForm({
+          full_name: res.profile_json?.full_name || session.user.name || '',
+          email: res.profile_json?.email || session.user.email || '',
+          phone: res.profile_json?.phone || '',
+          avatarUrl: res.profile_json?.avatarUrl || session.user.avatarUrl || '',
+        });
+        const contactRows = await apiRequest<ContactItem[]>('/settings/contacts', {
+          token: session.token,
+        });
+        setContacts(contactRows);
       }
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -96,6 +110,109 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error('Failed to update settings:', err);
+    }
+  };
+
+  const saveProfile = async () => {
+    try {
+      const session = getAuthSession();
+      if (!session || !data) return;
+      const updated = await apiRequest<any>('/settings', {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          profile_json: {
+            ...data.profile_json,
+            ...profileForm,
+            role: session.user.role,
+          },
+        },
+      });
+      setData(updated);
+      setProfileOpen(false);
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+      alert('Failed to update profile.');
+    }
+  };
+
+  const createContact = async () => {
+    const name = window.prompt('Contact name');
+    if (!name) return;
+    const email = window.prompt('Contact email') || '';
+    const phone = window.prompt('Contact phone') || '';
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const contact = await apiRequest<ContactItem>('/settings/contacts', {
+        method: 'POST',
+        token: session.token,
+        body: { name, email, phone, tag: 'Added Contact' },
+      });
+      setContacts((current) => [...current, contact]);
+    } catch (err) {
+      console.error('Failed to add contact:', err);
+      alert('Failed to add contact.');
+    }
+  };
+
+  const updateContact = async (contact: ContactItem) => {
+    if (contact.readonly) return;
+    const name = window.prompt('Edit contact name:', contact.name);
+    if (!name) return;
+    const email = window.prompt('Edit contact email:', contact.email || '') || '';
+    const phone = window.prompt('Edit contact phone:', contact.phone || '') || '';
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<ContactItem>(`/settings/contacts/${contact.id}`, {
+        method: 'PUT',
+        token: session.token,
+        body: { name, email, phone },
+      });
+      setContacts((current) => current.map((item) => item.id === contact.id ? updated : item));
+    } catch (err) {
+      console.error('Failed to update contact:', err);
+      alert('Failed to update contact.');
+    }
+  };
+
+  const deleteContact = async (contact: ContactItem) => {
+    if (contact.readonly) return;
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      await apiRequest(`/settings/contacts/${contact.id}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      setContacts((current) => current.filter((item) => item.id !== contact.id));
+    } catch (err) {
+      console.error('Failed to delete contact:', err);
+      alert('Failed to delete contact.');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
+      setPasswordMessage('Please fill current password, new password, and confirm password.');
+      return;
+    }
+    if (!isAllowedPassword(passwordForm.next)) {
+      setPasswordMessage(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      setPasswordMessage('New password and confirm password do not match.');
+      return;
+    }
+    try {
+      const response = await changeAccountPassword(passwordForm.current, passwordForm.next);
+      setPasswordForm({ current: '', next: '', confirm: '' });
+      setPasswordMessage(response.message);
+      setTimeout(() => setPasswordOpen(false), 1000);
+    } catch (error) {
+      setPasswordMessage(error instanceof Error ? error.message : 'Failed to change password.');
     }
   };
 
@@ -133,7 +250,7 @@ export default function SettingsPage() {
           <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest mb-4 flex items-center gap-2">
             <Settings className="w-4 h-4" /> {t('Profile & Account')}
           </h3>
-          <button className="w-full flex items-center justify-between p-4 rounded-xl bg-[#071f35] hover:bg-[#0a2a47] transition-all group">
+          <button onClick={() => setProfileOpen(true)} className="w-full flex items-center justify-between p-4 rounded-xl bg-[#071f35] hover:bg-[#0a2a47] transition-all group">
             <div className="flex items-center gap-4">
               <img
                 src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'rahul'}&backgroundColor=0a2a47`}
@@ -166,7 +283,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-400">Choose your application theme</p>
               </div>
               <div className="flex rounded-lg border border-[#0d3660] p-1 self-start md:self-auto bg-[#020b18]/60">
-                {(['Light', 'Dark', 'System'] as const).map((item) => (
+                {(['Light', 'Dark'] as const).map((item) => (
                   <button
                     key={item}
                     onClick={() => changeTheme(item)}
@@ -187,9 +304,8 @@ export default function SettingsPage() {
               <div className="flex rounded-lg border border-[#0d3660] p-1 self-start md:self-auto bg-[#020b18]/60">
                 {([
                   { code: 'en', name: 'English' },
-                  { code: 'es', name: 'Español' },
-                  { code: 'fr', name: 'Français' },
-                  { code: 'te', name: 'తెలుగు' }
+                  { code: 'hi', name: 'Hindi' },
+                  { code: 'te', name: 'Telugu' }
                 ] as const).map((item) => (
                   <button
                     key={item.code}
@@ -215,6 +331,7 @@ export default function SettingsPage() {
               return (
                 <button
                   key={i}
+                  onClick={() => item.label === 'Change Password' ? setPasswordOpen(true) : item.label === 'Privacy Policy' ? setPolicyOpen(true) : undefined}
                   className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-[#071f35] transition-all group"
                 >
                   <div className="flex items-center gap-3">
@@ -258,23 +375,23 @@ export default function SettingsPage() {
 
       {/* Right Column */}
       <div className="space-y-5">
-        {/* My Alerts */}
+        {/* My Contacts */}
         <div className="glass rounded-xl p-5 card-hover">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest flex items-center gap-2">
-              <Settings className="w-4 h-4" /> My Alerts
+              <Phone className="w-4 h-4" /> My Contacts
             </h3>
             <div className="flex items-center gap-2">
-              <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white hover:border-[#06b6d4] transition-all">
+              <button
+                onClick={createContact}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white hover:border-[#06b6d4] transition-all"
+              >
                 <Plus className="w-3.5 h-3.5" /> Add Contact
-              </button>
-              <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#071f35] border border-[#0d3660] text-xs text-white hover:border-[#06b6d4] transition-all">
-                <Settings className="w-3.5 h-3.5" /> Manage
               </button>
             </div>
           </div>
           <div className="space-y-2">
-            {alertContacts.map((contact, i) => (
+            {contacts.map((contact, i) => (
               <div
                 key={i}
                 className="flex items-center gap-3 p-3 rounded-lg bg-[#071f35]/50 hover:bg-[#071f35] transition-all animate-slide-in-up"
@@ -299,10 +416,12 @@ export default function SettingsPage() {
                     <Phone className="w-3 h-3 text-[#22d3ee]" />
                     {contact.phone}
                   </div>
-                  <RowActionMenu 
-                    onEdit={() => alert(`Editing alert contact: ${contact.name}`)}
-                    onDelete={() => alert(`Deleting alert contact: ${contact.name}`)}
-                  />
+                  {!contact.readonly && (
+                    <RowActionMenu 
+                      onEdit={() => updateContact(contact)}
+                      onDelete={() => deleteContact(contact)}
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -359,6 +478,75 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      {profileOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-[#0d3660] bg-[#031426] p-5 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">Edit Profile</h3>
+            <div className="mt-4 space-y-3">
+              <input
+                value={profileForm.avatarUrl}
+                onChange={(e) => setProfileForm({ ...profileForm, avatarUrl: e.target.value })}
+                placeholder="Profile picture URL"
+                className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"
+              />
+              <input
+                value={profileForm.full_name}
+                onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
+                placeholder="Full name"
+                className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"
+              />
+              <input
+                value={profileForm.email}
+                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                placeholder="Email"
+                className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"
+              />
+              <input
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                placeholder="Mobile number"
+                className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={() => setProfileOpen(false)} className="h-10 rounded-lg border border-[#0d3660] px-4 text-sm text-slate-200">Cancel</button>
+              <button onClick={saveProfile} className="h-10 rounded-lg bg-[#06b6d4] px-4 text-sm font-semibold text-white">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {passwordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-[#0d3660] bg-[#031426] p-5 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">Change Password</h3>
+            <div className="mt-4 space-y-3">
+              <input type="password" value={passwordForm.current} onChange={(event) => setPasswordForm((current) => ({ ...current, current: event.target.value }))} placeholder="Current password" className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white" />
+              <input type="password" value={passwordForm.next} onChange={(event) => setPasswordForm((current) => ({ ...current, next: event.target.value }))} placeholder="New password" className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white" />
+              <input type="password" value={passwordForm.confirm} onChange={(event) => setPasswordForm((current) => ({ ...current, confirm: event.target.value }))} placeholder="Confirm password" className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white" />
+              {passwordMessage && (
+                <p className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">{passwordMessage}</p>
+              )}
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={() => { setPasswordOpen(false); setPasswordMessage(''); }} className="h-10 rounded-lg border border-[#0d3660] px-4 text-sm text-slate-200">Cancel</button>
+              <button onClick={handleChangePassword} className="h-10 rounded-lg bg-[#06b6d4] px-4 text-sm font-semibold text-white">Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {policyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-[#0d3660] bg-[#031426] p-5 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">Privacy Policy</h3>
+            <div className="mt-4 max-h-[55vh] overflow-y-auto text-sm leading-6 text-slate-300">
+              Aqua Pulse stores account, device, site, readings, alerts, emergency, and report data needed to operate aquaculture monitoring. Data is used for live monitoring, notifications, audit history, and owner or manager reporting. Access is role-based, and agents only see assigned sites and related operational contacts.
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setPolicyOpen(false)} className="h-10 rounded-lg bg-[#06b6d4] px-4 text-sm font-semibold text-white">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

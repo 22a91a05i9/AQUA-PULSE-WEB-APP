@@ -157,7 +157,7 @@ export default function AlertsPage() {
   return (
     <div className="space-y-6 animate-fade-in text-slate-300">
       {/* Top Header Filter controls bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-b border-slate-800 pb-4">
+      <div className="hidden">
         {/* Navigation Tabs */}
         <div className="flex border-b border-slate-800 -mb-px w-full sm:w-auto overflow-x-auto">
           <button
@@ -202,6 +202,13 @@ export default function AlertsPage() {
             <span>Export</span>
           </button>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={exportAlerts} className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-[#06b6d4] text-white text-xs font-semibold hover:bg-[#0891b2] transition">
+          <Download className="w-3.5 h-3.5" />
+          <span>Export</span>
+        </button>
       </div>
 
       {/* Main Filter Inputs Row */}

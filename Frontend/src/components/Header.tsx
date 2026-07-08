@@ -313,7 +313,6 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
             <p className="text-sm font-bold text-white">{user.name}</p>
             <p className="text-xs text-slate-300">{roleLabel}</p>
           </div>
-          <ChevronDown className="w-4 h-4 text-slate-400 hidden md:block" />
         </button>
       </div>
     </header>

@@ -3,15 +3,18 @@ import { ArrowLeft, BadgePlus, ChevronDown, Mail, MapPin, Phone, Thermometer, Us
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 
 const initialForm = {
   name: '',
   phone: '',
   email: '',
-  password: 'password123', // Default temporary password for agents
+  password: '12345678',
   siteId: '',
   deviceId: '',
 };
+
+const phoneErrorMessage = 'Please enter a valid 10-digit phone number.';
 
 export default function SettingsAddAgentPage({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState(initialForm);
@@ -40,13 +43,21 @@ export default function SettingsAddAgentPage({ onBack }: { onBack: () => void })
   }, []);
 
   const updateField = (field: keyof typeof form, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => ({ ...current, [field]: field === 'phone' ? value.replace(/\D/g, '').slice(0, 10) : value }));
     setMessage(null);
   };
 
   const submitAgent = async () => {
     if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || !form.siteId || !form.deviceId) {
       setMessage({ text: 'Enter agent details, select a site, and assign a device before adding the agent.', type: 'error' });
+      return;
+    }
+    if (!/^\d{10}$/.test(form.phone.trim())) {
+      setMessage({ text: phoneErrorMessage, type: 'error' });
+      return;
+    }
+    if (!isAllowedPassword(form.password)) {
+      setMessage({ text: PASSWORD_POLICY_MESSAGE, type: 'error' });
       return;
     }
 
@@ -133,7 +144,7 @@ export default function SettingsAddAgentPage({ onBack }: { onBack: () => void })
       <FormPanel title="Agent Details">
         <div className="grid grid-cols-1 gap-x-8 gap-y-7 xl:grid-cols-2">
           <Field icon={UserRound} label="Full Name" required value={form.name} onChange={(value) => updateField('name', value)} placeholder="Enter full name" />
-          <Field icon={Phone} label="Phone Number" required value={form.phone} onChange={(value) => updateField('phone', value)} placeholder="Enter phone number" />
+          <Field icon={Phone} label="Phone Number" required value={form.phone} onChange={(value) => updateField('phone', value)} placeholder="Enter phone number" inputMode="numeric" maxLength={10} />
           <Field icon={Mail} label="Email Address" required value={form.email} onChange={(value) => updateField('email', value)} placeholder="Enter email address" />
           <Field icon={BadgePlus} label="Agent temporary Password" required value={form.password} onChange={(value) => updateField('password', value)} placeholder="Enter agent password" />
         </div>
@@ -209,13 +220,13 @@ function FormPanel({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function Field({ icon: Icon, label, required, value, onChange, placeholder }: { icon: LucideIcon; label: string; required?: boolean; value: string; onChange: (value: string) => void; placeholder: string }) {
+function Field({ icon: Icon, label, required, value, onChange, placeholder, inputMode, maxLength }: { icon: LucideIcon; label: string; required?: boolean; value: string; onChange: (value: string) => void; placeholder: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']; maxLength?: number }) {
   return (
     <label className="block">
       <span className="text-base font-semibold text-white">{label} {required && <span className="text-red-400">*</span>}</span>
       <div className="relative mt-3">
         <Icon className="absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-300" />
-        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="h-16 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/50 pl-16 pr-5 text-base text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300" />
+        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} className="h-16 w-full rounded-lg border border-[#0d3660] bg-[#020b18]/50 pl-16 pr-5 text-base text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300" />
       </div>
     </label>
   );

@@ -175,6 +175,7 @@ export default function SitesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [regionFilter, setRegionFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [creatingSite, setCreatingSite] = useState(false);
   const [deviceList, setDeviceList] = useState<any[]>([]);
   const [alertsList, setAlertsList] = useState<any[]>([]);
   const [readingsList, setReadingsList] = useState<any[]>([]);
@@ -350,6 +351,12 @@ export default function SitesPage() {
 
   const handleCreateSite = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingSite) return;
+    if (sitesList.some((site) => site.name.trim().toLowerCase() === name.trim().toLowerCase() && site.location.trim().toLowerCase() === location.trim().toLowerCase())) {
+      alert('Site already created.');
+      return;
+    }
+    setCreatingSite(true);
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -357,14 +364,14 @@ export default function SitesPage() {
       await apiRequest('/owner/sites', {
         method: 'POST',
         token: session.token,
-        body: JSON.stringify({
+        body: {
           name,
           site_type: siteType,
           location_text: location,
           farm_type_id: 1,
           species_id: 1,
           custom_thresholds: { area },
-        }),
+        },
       });
 
       setShowAddModal(false);
@@ -375,6 +382,8 @@ export default function SitesPage() {
       loadData();
     } catch (err: any) {
       alert('Error creating site: ' + (err.message || String(err)));
+    } finally {
+      setCreatingSite(false);
     }
   };
 
@@ -503,7 +512,9 @@ export default function SitesPage() {
               </div>
               <div className="mt-6 flex justify-end gap-3 border-t border-[#0d3660]/60 pt-4">
                 <button type="button" onClick={() => setShowAddModal(false)} className="rounded border border-[#0d3660] px-5 py-2 text-sm text-slate-300 hover:text-white transition">Cancel</button>
-                <button type="submit" className="rounded bg-blue-600 hover:bg-blue-500 px-5 py-2 text-sm font-bold text-white transition">Save Site</button>
+                <button type="submit" disabled={creatingSite} className="rounded bg-blue-600 hover:bg-blue-500 px-5 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60">
+                  {creatingSite ? 'Saving...' : 'Save Site'}
+                </button>
               </div>
             </form>
           </div>

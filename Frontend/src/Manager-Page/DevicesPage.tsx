@@ -18,9 +18,15 @@ const SENSOR_TYPES = [
 ];
 
 const defaultSensorIds = [1, 2, 3];
+const DEVICE_NAME_PATTERN = /^Device \d{3}$/;
+const DEVICE_VERSION_OPTIONS = ['1.0', '2.0', '3.0', '4.0'];
 
 function sensorNames(ids: number[]) {
   return SENSOR_TYPES.filter((sensor) => ids.includes(sensor.id)).map((sensor) => sensor.label);
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '');
 }
 
 export default function DevicesPage() {
@@ -35,10 +41,11 @@ export default function DevicesPage() {
   const [imei, setImei] = useState('');
   const [simNumber, setSimNumber] = useState('');
   const [status, setStatus] = useState('inactive');
-  const [deviceType, setDeviceType] = useState('Water Quality');
+  const [deviceType, setDeviceType] = useState('2.0');
   const [selectedSensorIds, setSelectedSensorIds] = useState<number[]>(defaultSensorIds);
   const [sensorsLocked, setSensorsLocked] = useState(false);
   const [message, setMessage] = useState('');
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   const loadDevices = async () => {
     try {
@@ -52,7 +59,7 @@ export default function DevicesPage() {
           dbId: d.id,
           id: d.device_uid || 'DVC-UNKNOWN',
           name: `Device ${(d.device_uid || '').slice(-4)}`,
-          type: d.firmware_version || 'Sensor',
+          type: d.firmware_version || '2.0',
           site: d.site_id ? `Site #${d.site_id}` : 'Warehouse',
           status: d.status === 'active' ? 'Active' : 'Inactive',
           rawStatus: d.status,
@@ -95,14 +102,66 @@ export default function DevicesPage() {
 
   const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !deviceUid.trim()) {
-      setMessage('Device Name and Device ID are required.');
+    const requiredFields = [
+      ['name', name],
+      ['deviceUid', deviceUid],
+      ['deviceType', deviceType],
+      ['status', status],
+      ['imei', imei],
+      ['simNumber', simNumber],
+    ];
+    const emptyFields = requiredFields.filter(([, value]) => !String(value).trim()).map(([field]) => field);
+
+    if (emptyFields.length > 0) {
+      setMissingFields(emptyFields);
+      setMessage('Please fill all required fields.');
+      return;
+    }
+    if (!DEVICE_NAME_PATTERN.test(name.trim())) {
+      setMissingFields(['name']);
+      setMessage('Device Name must use this format: Device 005.');
+      return;
+    }
+    if (!/^\d+$/.test(deviceUid.trim())) {
+      setMissingFields(['deviceUid']);
+      setMessage('Device ID must contain numbers only.');
+      return;
+    }
+    if (deviceList.some((device) => device.dbId !== editingDeviceId && device.id === deviceUid.trim())) {
+      setMissingFields(['deviceUid']);
+      setMessage('Device ID already exists.');
+      return;
+    }
+    if (!/^\d{1,10}$/.test(imei.trim())) {
+      setMissingFields(['imei']);
+      setMessage('IMEI Number must contain numbers only, up to 10 digits.');
+      return;
+    }
+    if (deviceList.some((device) => device.dbId !== editingDeviceId && device.imei === imei.trim())) {
+      setMissingFields(['imei']);
+      setMessage('IMEI Number already exists.');
+      return;
+    }
+    if (!/^\d{10}$/.test(simNumber.trim())) {
+      setMissingFields(['simNumber']);
+      setMessage('SIM Number must be exactly 10 digits.');
+      return;
+    }
+    if (deviceList.some((device) => device.dbId !== editingDeviceId && device.simNumber === simNumber.trim())) {
+      setMissingFields(['simNumber']);
+      setMessage('SIM Number already exists.');
+      return;
+    }
+    if (!DEVICE_VERSION_OPTIONS.includes(deviceType)) {
+      setMissingFields(['deviceType']);
+      setMessage('Device Type must be one of: 1.0, 2.0, 3.0, 4.0.');
       return;
     }
     if (selectedSensorIds.length === 0) {
       setMessage('Choose at least one sensor type for this device.');
       return;
     }
+    setMissingFields([]);
 
     try {
       const session = getAuthSession();
@@ -110,7 +169,7 @@ export default function DevicesPage() {
         await apiRequest(editingDeviceId ? `/manager/devices/${editingDeviceId}` : '/manager/devices', {
           method: editingDeviceId ? 'PUT' : 'POST',
           token: session.token,
-          body: JSON.stringify({
+          body: {
             device_uid: deviceUid.trim(),
             imei: imei.trim() || null,
             sim_number: simNumber.trim() || null,
@@ -118,7 +177,7 @@ export default function DevicesPage() {
             firmware_version: deviceType,
             status: status,
             sensor_type_ids: selectedSensorIds,
-          }),
+          },
         });
 
         setName('');
@@ -126,14 +185,16 @@ export default function DevicesPage() {
         setImei('');
         setSimNumber('');
         setStatus('inactive');
+        setDeviceType('2.0');
         setSelectedSensorIds(defaultSensorIds);
         setSensorsLocked(false);
         setEditingDeviceId(null);
+        setMissingFields([]);
         setMessage(editingDeviceId ? 'Device successfully updated in database!' : 'Device successfully registered in database!');
         loadDevices();
       }
     } catch (err: any) {
-      setMessage('Failed to register device: ' + (err.message || String(err)));
+      setMessage(err.message || 'Failed to register device.');
     }
   };
 
@@ -147,6 +208,7 @@ export default function DevicesPage() {
     setDeviceType(device.type);
     setSelectedSensorIds(device.sensorTypeIds?.length ? device.sensorTypeIds : defaultSensorIds);
     setSensorsLocked(true);
+    setMissingFields([]);
     setMessage('Editing selected device.');
   };
 
@@ -192,6 +254,11 @@ export default function DevicesPage() {
     setMessage('');
   };
 
+  const inputClass = (field: string) =>
+    `mt-2 h-12 w-full rounded-md border bg-[#020b18]/50 px-4 text-sm text-white outline-none ${
+      missingFields.includes(field) ? 'border-red-500 focus:border-red-400' : 'border-[#0d3660] focus:border-cyan-300'
+    }`;
+
   return (
     <div className="space-y-6 text-left">
       <div>
@@ -212,36 +279,34 @@ export default function DevicesPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <label className="block">
               <span className="text-sm font-semibold text-white">Device Name</span>
-              <input required value={name} onChange={e => { setName(e.target.value); setMessage(''); }} placeholder="e.g. pH Sensor 4" className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300" />
+              <input value={name} onChange={e => { setName(e.target.value); setMessage(''); setMissingFields((current) => current.filter((field) => field !== 'name')); }} placeholder="Device 005" className={inputClass('name')} />
             </label>
             <label className="block">
               <span className="text-sm font-semibold text-white">Device Type</span>
-              <select value={deviceType} onChange={e => setDeviceType(e.target.value)} className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300">
-                <option value="Water Quality">Water Quality Sensor</option>
-                <option value="pH Sensor">pH Sensor</option>
-                <option value="Temperature">Temperature Sensor</option>
-                <option value="DO Sensor">DO Sensor</option>
-                <option value="Aerator">Aerator Controller</option>
+              <select value={deviceType} onChange={e => { setDeviceType(e.target.value); setMissingFields((current) => current.filter((field) => field !== 'deviceType')); }} className={inputClass('deviceType')}>
+                {DEVICE_VERSION_OPTIONS.map((version) => (
+                  <option key={version} value={version}>{version}</option>
+                ))}
               </select>
             </label>
             <label className="block">
               <span className="text-sm font-semibold text-white">Device ID</span>
-              <input required value={deviceUid} onChange={e => { setDeviceUid(e.target.value); setMessage(''); }} placeholder="e.g. DVC-005" className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300" />
+              <input inputMode="numeric" pattern="\d*" value={deviceUid} onChange={e => { setDeviceUid(onlyDigits(e.target.value)); setMessage(''); setMissingFields((current) => current.filter((field) => field !== 'deviceUid')); }} placeholder="005" className={inputClass('deviceUid')} />
             </label>
             <label className="block">
               <span className="text-sm font-semibold text-white">Status</span>
-              <select value={status} onChange={e => setStatus(e.target.value)} className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300">
+              <select value={status} onChange={e => { setStatus(e.target.value); setMissingFields((current) => current.filter((field) => field !== 'status')); }} className={inputClass('status')}>
                 <option value="inactive">Inactive (Warehouse)</option>
                 <option value="active">Active</option>
               </select>
             </label>
             <label className="block">
               <span className="text-sm font-semibold text-white">IMEI Number</span>
-              <input value={imei} onChange={e => setImei(e.target.value)} placeholder="Enter IMEI number" className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300" />
+              <input inputMode="numeric" maxLength={10} pattern="\d{1,10}" value={imei} onChange={e => { setImei(onlyDigits(e.target.value).slice(0, 10)); setMessage(''); setMissingFields((current) => current.filter((field) => field !== 'imei')); }} placeholder="Up to 10 digits" className={inputClass('imei')} />
             </label>
             <label className="block">
               <span className="text-sm font-semibold text-white">SIM Number</span>
-              <input value={simNumber} onChange={e => setSimNumber(e.target.value)} placeholder="Enter SIM number" className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300" />
+              <input inputMode="numeric" maxLength={10} pattern="\d{10}" value={simNumber} onChange={e => { setSimNumber(onlyDigits(e.target.value).slice(0, 10)); setMessage(''); setMissingFields((current) => current.filter((field) => field !== 'simNumber')); }} placeholder="10 digits" className={inputClass('simNumber')} />
             </label>
           </div>
 
@@ -313,8 +378,10 @@ export default function DevicesPage() {
                   setImei('');
                   setSimNumber('');
                   setStatus('inactive');
+                  setDeviceType('2.0');
                   setSelectedSensorIds(defaultSensorIds);
                   setSensorsLocked(false);
+                  setMissingFields([]);
                   setMessage('');
                 }}
                 className="mt-3 flex h-11 w-full items-center justify-center rounded-md border border-[#0d3660] font-bold text-white"

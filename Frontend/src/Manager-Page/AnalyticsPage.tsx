@@ -195,7 +195,7 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate: (page: strin
 
   return (
     <div className="space-y-6">
-      <ControlCenter />
+      <ControlCenter onOpen={() => onNavigate('assignments')} />
       <PageTitle
         title="Analytics"
         subtitle="Insights and analytics overview"

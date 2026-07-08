@@ -245,7 +245,7 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
   return (
     <div className="space-y-6 animate-fade-in text-slate-300">
       {/* Top Filter and Controls Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-b border-slate-800 pb-4">
+      <div className="hidden">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <select
             value={selectedPond}

@@ -184,7 +184,7 @@ function PageContent({ currentPage, onNavigate }: { currentPage: string; onNavig
     case 'settings':
       return <SettingsPage />;
     case 'sites':
-      return <SitesPage />;
+      return <SitesPage onNavigate={onNavigate} />;
     case 'devices':
       return <DevicesPage />;
     case 'live':

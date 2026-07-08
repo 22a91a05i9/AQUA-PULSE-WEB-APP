@@ -3,15 +3,18 @@ import { BadgePlus, ChevronDown, Mail, Phone, UserPlus, UserRound, KeyRound } fr
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 
 const initialForm = {
   name: '',
   phone: '',
   email: '',
-  password: 'agentpassword123',
+  password: '',
   farmTypeId: '',
   speciesId: '',
 };
+
+const phoneErrorMessage = 'Please enter a valid 10-digit phone number.';
 
 export default function AddAgentPage({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState(initialForm);
@@ -45,8 +48,9 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
   }, []);
 
   const updateField = (field: keyof typeof form, value: string) => {
+    const nextValue = field === 'phone' ? value.replace(/\D/g, '').slice(0, 10) : value;
     setForm((current) => {
-      const next = { ...current, [field]: value };
+      const next = { ...current, [field]: nextValue };
       // If farm type changes, reset species selection
       if (field === 'farmTypeId') {
         next.speciesId = '';
@@ -60,6 +64,14 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
   const submitAgent = async () => {
     if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || !form.password.trim() || !form.farmTypeId || !form.speciesId) {
       setErrorMsg('Please enter all required fields.');
+      return;
+    }
+    if (!/^\d{10}$/.test(form.phone.trim())) {
+      setErrorMsg(phoneErrorMessage);
+      return;
+    }
+    if (!isAllowedPassword(form.password)) {
+      setErrorMsg(PASSWORD_POLICY_MESSAGE);
       return;
     }
 
@@ -88,7 +100,7 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
       }, 1500);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'Failed to create agent.');
+      setErrorMsg(err.message === 'Phone number already exists.' ? 'Phone number already exists.' : err.message || 'Failed to create agent.');
     }
   };
 
@@ -138,6 +150,8 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
               value={form.phone}
               onChange={(value) => updateField('phone', value)}
               placeholder="Enter phone number"
+              inputMode="numeric"
+              maxLength={10}
             />
             <Field
               icon={Mail}
@@ -149,11 +163,11 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
             />
             <Field
               icon={KeyRound}
-              label="Password (min 8 chars)"
+              label="Password"
               required
               value={form.password}
               onChange={(value) => updateField('password', value)}
-              placeholder="password"
+              placeholder="12345678 or Aqua@123"
             />
           </div>
         </FormPanel>
@@ -216,6 +230,8 @@ function Field({
   value,
   onChange,
   placeholder,
+  inputMode,
+  maxLength,
 }: {
   icon: LucideIcon;
   label: string;
@@ -223,6 +239,8 @@ function Field({
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+  maxLength?: number;
 }) {
   return (
     <label className="block">
@@ -233,6 +251,8 @@ function Field({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
+          inputMode={inputMode}
+          maxLength={maxLength}
           className="h-11 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300"
         />
       </div>

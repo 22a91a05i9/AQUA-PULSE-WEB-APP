@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Edit2, MoreVertical, Trash2 } from 'lucide-react';
 
 export function exportRowsToCsv(filename: string, rows: Record<string, unknown>[]) {
@@ -37,18 +38,46 @@ export function rowMatchesSearch(row: unknown[], query: string) {
 export function RowActionMenu({
   onEdit,
   onDelete,
-  up = true,
+  up: _up = true,
 }: {
   onEdit: () => void;
   onDelete: () => void;
   up?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const positionMenu = () => {
+    const button = ref.current?.querySelector('button');
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const menuWidth = 144;
+    const menuHeight = 88;
+    const gap = 6;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow > menuHeight + gap ? rect.bottom + gap : Math.max(gap, rect.top - menuHeight - gap);
+
+    setMenuStyle({
+      position: 'fixed',
+      top,
+      left: Math.max(gap, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - gap)),
+      width: menuWidth,
+      zIndex: 99999,
+    });
+  };
 
   useEffect(() => {
     function close(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        ref.current &&
+        !ref.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setOpen(false);
       }
     }
@@ -61,23 +90,24 @@ export function RowActionMenu({
     <div ref={ref} className="relative inline-flex">
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#0d3660] text-slate-300 transition hover:border-cyan-400 hover:text-white"
+        onClick={() => {
+          positionMenu();
+          setOpen((value) => !value);
+        }}
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#0d3660] bg-[#041526]/70 text-slate-300 transition hover:border-cyan-400 hover:text-white"
         aria-label="Open row actions"
       >
         <MoreVertical className="h-4 w-4" />
       </button>
-      {open && (
-        <div className={`absolute right-0 z-50 min-w-36 overflow-hidden rounded-lg border border-[#0d3660] bg-[#031426] py-1 text-left shadow-xl ${
-          up ? 'bottom-full mb-1' : 'top-10'
-        }`}>
+      {open && createPortal(
+        <div ref={menuRef} style={menuStyle} className="overflow-hidden rounded-lg border border-[#0d3660] bg-[#031426] p-1 text-left shadow-2xl">
           <button
             type="button"
             onClick={() => {
               setOpen(false);
               onEdit();
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-[#071f35]"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-[#071f35]"
           >
             <Edit2 className="h-4 w-4 text-cyan-300" />
             Edit
@@ -88,12 +118,13 @@ export function RowActionMenu({
               setOpen(false);
               onDelete();
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/10"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/10"
           >
             <Trash2 className="h-4 w-4" />
             Delete
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

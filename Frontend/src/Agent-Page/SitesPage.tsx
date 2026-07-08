@@ -5,7 +5,6 @@ import {
   LayoutGrid,
   List,
   Eye,
-  MoreVertical,
   X,
   MapPin,
   Cpu,
@@ -13,6 +12,8 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { apiRequest } from '../lib/api';
@@ -34,6 +35,11 @@ interface Site {
   operator: string;
   contactNumber: string;
   email: string;
+  owner?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  } | null;
 }
 
 
@@ -44,7 +50,7 @@ const statusColors: Record<string, string> = {
   critical: '#ef4444',
 };
 
-export default function SitesPage() {
+export default function SitesPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [regionFilter, setRegionFilter] = useState('all');
@@ -112,8 +118,9 @@ export default function SitesPage() {
       siteType: site.site_type || 'Freshwater',
       totalArea: 'N/A',
       operator: 'Assigned Agent',
-      contactNumber: 'N/A',
-      email: 'N/A',
+      contactNumber: site.owner?.phone || 'N/A',
+      email: site.owner?.email || 'N/A',
+      owner: site.owner || null,
     };
   });
 
@@ -129,6 +136,11 @@ export default function SitesPage() {
 
   const totalPages = Math.ceil(filteredSites.length / itemsPerPage) || 1;
   const paginatedSites = filteredSites.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const selectedSiteAlerts = selectedSite
+    ? (data?.alerts || [])
+        .filter((alert: any) => String(alert.site_id) === selectedSite.id)
+        .slice(0, 5)
+    : [];
 
   return (
     <div className="space-y-6 animate-fade-in relative text-slate-350">
@@ -500,13 +512,13 @@ export default function SitesPage() {
                   <div className="text-slate-500">Total Area</div>
                   <div className="text-white text-right">{selectedSite.totalArea}</div>
 
-                  <div className="text-slate-500">Operator</div>
-                  <div className="text-white text-right">{selectedSite.operator}</div>
+                  <div className="text-slate-500">Owner Assigned</div>
+                  <div className="text-white text-right">{selectedSite.owner?.name || selectedSite.operator}</div>
 
-                  <div className="text-slate-500">Contact Number</div>
+                  <div className="text-slate-500">Owner Contact</div>
                   <div className="text-white text-right">{selectedSite.contactNumber}</div>
 
-                  <div className="text-slate-500">Email</div>
+                  <div className="text-slate-500">Owner Email</div>
                   <div className="text-[#22d3ee] text-right truncate max-w-[180px]" title={selectedSite.email}>
                     {selectedSite.email}
                   </div>
@@ -686,35 +698,45 @@ export default function SitesPage() {
             <div className="glass rounded-xl p-5 border border-slate-800 mt-6">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Recent Alerts</h4>
-                <button className="text-xs text-[#06b6d4] hover:text-[#22d3ee] font-semibold transition">View All Alerts</button>
+                <button
+                  onClick={() => {
+                    setSelectedSite(null);
+                    onNavigate?.('alerts');
+                  }}
+                  className="text-xs text-[#06b6d4] hover:text-[#22d3ee] font-semibold transition"
+                >
+                  View All Alerts
+                </button>
               </div>
               <div className="space-y-3.5 text-xs sm:text-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-amber-500">⚠️</span>
-                    <span className="font-medium text-white">High Turbidity</span>
-                    <span className="text-xs text-slate-500">Pond 03</span>
-                  </div>
-                  <span className="text-xs text-slate-400">May 16, 2024 09:15 AM</span>
-                </div>
+                {selectedSiteAlerts.length === 0 ? (
+                  <p className="py-4 text-center text-slate-400">No alerts found for this site.</p>
+                ) : (
+                  selectedSiteAlerts.map((alert: any) => {
+                    const isCritical = alert.severity === 'critical';
+                    const Icon = isCritical ? AlertTriangle : AlertCircle;
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-red-500">⚠️</span>
-                    <span className="font-medium text-white">Low Dissolved Oxygen</span>
-                    <span className="text-xs text-slate-500">Pond 07</span>
-                  </div>
-                  <span className="text-xs text-slate-400">May 16, 2024 08:45 AM</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[#3b82f6]">ℹ️</span>
-                    <span className="font-medium text-white">Device Battery Low (20%)</span>
-                    <span className="text-xs text-slate-500">Pond 05 - Water Pump</span>
-                  </div>
-                  <span className="text-xs text-slate-400">May 16, 2024 07:30 AM</span>
-                </div>
+                    return (
+                      <button
+                        key={alert.id}
+                        onClick={() => {
+                          setSelectedSite(null);
+                          onNavigate?.('alerts');
+                        }}
+                        className="flex w-full items-center justify-between gap-4 rounded-lg p-2 text-left transition hover:bg-[#071f35]/60"
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <Icon className={`h-4 w-4 shrink-0 ${isCritical ? 'text-red-500' : 'text-amber-500'}`} />
+                          <span className="truncate font-medium text-white">{alert.title || alert.message || 'Water Quality Alert'}</span>
+                          <span className="shrink-0 text-xs text-slate-500">Device #{alert.device_id}</span>
+                        </div>
+                        <span className="shrink-0 text-xs text-slate-400">
+                          {alert.created_at ? new Date(alert.created_at).toLocaleString() : 'N/A'}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
