@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Bell, ChevronDown, Database, LockKeyhole, RefreshCw, Save, Shield, Upload, Users } from 'lucide-react';
+import { Bell, ChevronDown, Database, LockKeyhole, RefreshCw, Save, Shield, Trash2, Upload, Users } from 'lucide-react';
 import { PageTitle, Panel, ToneIcon } from './components';
-import { changePassword as changeAccountPassword } from '../lib/auth';
+import { apiRequest } from '../lib/api';
+import { changePassword as changeAccountPassword, getAuthSession, updateStoredAuthUser } from '../lib/auth';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 
 const logRows = [
@@ -12,16 +13,17 @@ const logRows = [
 ];
 
 export default function SettingsPage() {
+  const session = getAuthSession();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     account: true,
     system: false,
     security: false,
   });
   const [profile, setProfile] = useState({
-    name: 'Default Manager',
-    email: 'manager@gmail.com',
-    phone: '9876543210',
-    avatar: '',
+    name: session?.user.name || 'Default Manager',
+    email: session?.user.email || 'manager@gmail.com',
+    phone: '',
+    avatar: session?.user.avatarUrl || '',
   });
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
   const [notifications, setNotifications] = useState({ alerts: true, reports: true, deviceOffline: true });
@@ -35,17 +37,76 @@ export default function SettingsPage() {
     [logFilter],
   );
 
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const session = getAuthSession();
+        if (!session) return;
+
+        const settings = await apiRequest<any>('/settings', {
+          token: session.token,
+        });
+        const profileJson = settings.profile_json || {};
+        setProfile({
+          name: profileJson.full_name || session.user.name || 'Default Manager',
+          email: profileJson.email || session.user.email || 'manager@gmail.com',
+          phone: profileJson.phone || '',
+          avatar: profileJson.avatar || profileJson.avatarUrl || session.user.avatarUrl || '',
+        });
+      } catch (err) {
+        console.error('Failed to load manager settings:', err);
+      }
+    }
+
+    loadSettings();
+  }, []);
+
   const toggleSection = (section: string) => {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
     setMessage('');
   };
 
-  const saveProfile = () => {
-    if (!profile.name.trim() || !/^[^\s@]+@gmail\.com$/i.test(profile.email) || !/^\d{10}$/.test(profile.phone)) {
-      setMessage('Enter name, a valid @gmail.com email, and a 10-digit phone number.');
+  const handleProfileImage = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfile((current) => ({ ...current, avatar: String(reader.result || '') }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveProfile = async () => {
+    if (!profile.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(profile.email) || (profile.phone && !/^\d{10}$/.test(profile.phone))) {
+      setMessage('Enter name, a valid email, and a 10-digit phone number if phone is provided.');
       return;
     }
-    setMessage('Profile settings saved successfully.');
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const updated = await apiRequest<any>('/settings', {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          profile_json: {
+            full_name: profile.name.trim(),
+            email: profile.email.trim(),
+            phone: profile.phone.trim() || null,
+            avatar: profile.avatar,
+            role: session.user.role,
+          },
+        },
+      });
+      const updatedProfile = updated.profile_json || {};
+      updateStoredAuthUser({
+        name: updatedProfile.full_name || profile.name,
+        email: updatedProfile.email || profile.email,
+        avatarUrl: updatedProfile.avatar || undefined,
+      });
+      setMessage('Profile settings saved successfully.');
+    } catch (err) {
+      console.error('Failed to save manager profile:', err);
+      setMessage(err instanceof Error ? err.message : 'Failed to save profile settings.');
+    }
   };
 
   const changePassword = async () => {
@@ -129,12 +190,19 @@ export default function SettingsPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) setProfile((current) => ({ ...current, avatar: URL.createObjectURL(file) }));
-                  }}
+                  onChange={(event) => handleProfileImage(event.target.files?.[0] || null)}
                 />
               </label>
+              {profile.avatar && (
+                <button
+                  type="button"
+                  onClick={() => setProfile((current) => ({ ...current, avatar: '' }))}
+                  className="mt-3 inline-flex h-10 items-center gap-2 rounded-md border border-red-400/40 px-4 text-sm font-bold text-red-200 hover:bg-red-400/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remove
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} className="h-12 rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none focus:border-cyan-300" placeholder="Full name" />

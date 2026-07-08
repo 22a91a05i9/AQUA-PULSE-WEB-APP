@@ -132,7 +132,6 @@ export default function DevicesPage() {
   const [deviceReadings, setDeviceReadings] = useState<SensorReading[]>([]);
   const [readingsLoading, setReadingsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [typeFilter, setTypeFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const itemsPerPage = 10;
@@ -253,8 +252,7 @@ export default function DevicesPage() {
       dev.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       dev.pondName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || dev.status === statusFilter;
-    const matchesType = typeFilter === 'all' || dev.type.toLowerCase().includes(typeFilter.toLowerCase()) || (typeFilter === 'wqs' && dev.type.toLowerCase().includes('water quality')) || (typeFilter === 'sf' && dev.type.toLowerCase().includes('feeder')) || (typeFilter === 'ae' && dev.type.toLowerCase().includes('aerator'));
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesStatus;
   });
 
   const totalPages = Math.ceil(filteredDevices.length / itemsPerPage) || 1;
@@ -837,20 +835,6 @@ export default function DevicesPage() {
                     <option value="warning">Warning</option>
                     <option value="offline">Offline</option>
                     <option value="maintenance">Maintenance</option>
-                  </select>
-
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => {
-                      setTypeFilter(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="h-10 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-sm text-slate-300 focus:outline-none focus:border-[#06b6d4] animate-fade-in"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="wqs">Water Quality Sensor</option>
-                    <option value="sf">Smart Feeder</option>
-                    <option value="ae">Aerator</option>
                   </select>
                 </>
               )}

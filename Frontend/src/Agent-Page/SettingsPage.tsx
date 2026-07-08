@@ -13,9 +13,11 @@ import {
   MessageCircle,
   Megaphone,
   Phone,
+  Trash2,
+  Upload,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
-import { changePassword as changeAccountPassword, getAuthSession } from '../lib/auth';
+import { changePassword as changeAccountPassword, getAuthSession, updateStoredAuthUser } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { RowActionMenu } from '../lib/tableActions';
@@ -129,11 +131,25 @@ export default function SettingsPage() {
         },
       });
       setData(updated);
+      updateStoredAuthUser({
+        name: profileForm.full_name,
+        email: profileForm.email,
+        avatarUrl: profileForm.avatarUrl || undefined,
+      });
       setProfileOpen(false);
     } catch (err) {
       console.error('Failed to update profile:', err);
       alert('Failed to update profile.');
     }
+  };
+
+  const handleProfileImage = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfileForm((current) => ({ ...current, avatarUrl: String(reader.result || '') }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const createContact = async () => {
@@ -253,7 +269,7 @@ export default function SettingsPage() {
           <button onClick={() => setProfileOpen(true)} className="w-full flex items-center justify-between p-4 rounded-xl bg-[#071f35] hover:bg-[#0a2a47] transition-all group">
             <div className="flex items-center gap-4">
               <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'rahul'}&backgroundColor=0a2a47`}
+                src={profileForm.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'rahul'}&backgroundColor=0a2a47`}
                 alt="Profile"
                 className="w-14 h-14 rounded-full ring-2 ring-[#06b6d4]/30"
               />
@@ -483,12 +499,28 @@ export default function SettingsPage() {
           <div className="w-full max-w-md rounded-xl border border-[#0d3660] bg-[#031426] p-5 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Edit Profile</h3>
             <div className="mt-4 space-y-3">
-              <input
-                value={profileForm.avatarUrl}
-                onChange={(e) => setProfileForm({ ...profileForm, avatarUrl: e.target.value })}
-                placeholder="Profile picture URL"
-                className="h-11 w-full rounded-lg border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"
-              />
+              <div className="flex items-center gap-3 rounded-lg border border-[#0d3660] bg-[#020b18] p-3">
+                <img
+                  src={profileForm.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profileForm.full_name || 'agent'}&backgroundColor=0a2a47`}
+                  alt={profileForm.full_name || 'Profile'}
+                  className="h-14 w-14 rounded-full object-cover"
+                />
+                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-cyan-300/40 px-3 text-sm font-bold text-cyan-100 hover:bg-cyan-300/10">
+                  <Upload className="h-4 w-4" />
+                  Upload
+                  <input type="file" accept="image/*" className="hidden" onChange={(event) => handleProfileImage(event.target.files?.[0] || null)} />
+                </label>
+                {profileForm.avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setProfileForm((current) => ({ ...current, avatarUrl: '' }))}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-400/40 px-3 text-sm font-bold text-red-200 hover:bg-red-400/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remove
+                  </button>
+                )}
+              </div>
               <input
                 value={profileForm.full_name}
                 onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}

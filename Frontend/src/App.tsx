@@ -45,7 +45,9 @@ export default function App() {
     setCurrentPage('login');
   };
 
-  if (currentPage === 'login' || !session) {
+  const isPasswordResetRoute = window.location.pathname.includes('reset-password');
+
+  if (currentPage === 'login' || !session || isPasswordResetRoute) {
     return <LoginPage onLogin={handleLogin} />;
   }
 

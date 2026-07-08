@@ -25,18 +25,45 @@ def hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def generate_reset_otp() -> str:
+    return f"{secrets.randbelow(100000):05d}"
+
+
 def send_password_reset_email(email: str, token: str) -> None:
     if not settings.smtp_host or not settings.smtp_from_email:
         return
 
     message = EmailMessage()
-    message["Subject"] = "Aqua Pulse password reset code"
+    message["Subject"] = f"Aqua Pulse OTP: {token}"
     message["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
     message["To"] = email
     message.set_content(
-        "Use this password reset code in Aqua Pulse:\n\n"
+        "Your Aqua Pulse password reset OTP is:\n\n"
         f"{token}\n\n"
-        "This code expires in 30 minutes. If you did not request it, ignore this email."
+        "Enter this 5-digit OTP on the Aqua Pulse reset screen. "
+        "This OTP expires in 30 minutes. If you did not request it, ignore this email."
+    )
+    message.add_alternative(
+        f"""
+        <html>
+          <body style="margin:0;padding:24px;background:#f1f5f9;font-family:Segoe UI,Tahoma,sans-serif;color:#0f172a;">
+            <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbeafe;">
+              <div style="padding:24px 28px;background:#041526;color:#e0f2fe;">
+                <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#22d3ee;">Aqua Pulse</p>
+                <h2 style="margin:0;font-size:24px;">Your password reset OTP</h2>
+              </div>
+              <div style="padding:26px 28px;">
+                <p style="margin-top:0;">We received a request to reset your Aqua Pulse password.</p>
+                <p style="margin:0 0 14px;color:#475569;">Enter this 5-digit OTP in Aqua Pulse to create a new password.</p>
+                <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0f172a;">Your OTP code:</p>
+                <div style="padding:16px 18px;border-radius:10px;background:#e0f2fe;color:#0f172a;font-size:32px;letter-spacing:10px;font-weight:900;text-align:center;">{token}</div>
+                <p style="margin:14px 0 0;color:#475569;">This OTP expires in 30 minutes. If you did not request it, ignore this email.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+        """,
+        subtype="html",
     )
 
     if settings.smtp_use_ssl:
@@ -59,12 +86,12 @@ def smtp_configured() -> bool:
 
 
 def create_password_reset(payload: ForgotPasswordRequest, db: Session) -> ForgotPasswordResponse:
-    generic_message = "If that email is registered, a password reset code has been sent."
+    generic_message = "If that email is registered, a reset code has been sent."
     user = db.scalar(select(User).where(User.email == payload.email, User.is_active.is_(True)))
     if not user:
         return ForgotPasswordResponse(message=generic_message, smtp_configured=smtp_configured())
 
-    token = secrets.token_urlsafe(32)
+    token = generate_reset_otp()
     expires_at = datetime.utcnow() + timedelta(minutes=30)
     db.add(
         PasswordResetToken(
@@ -83,16 +110,13 @@ def create_password_reset(payload: ForgotPasswordRequest, db: Session) -> Forgot
     except Exception:
         logger.exception("Password reset email failed for user %s", user.id)
 
-    if settings.app_env.lower() != "production":
-        message = generic_message if email_sent else "Password reset code created. SMTP is not configured, so use the development code shown here."
-        return ForgotPasswordResponse(
-            message=message,
-            reset_token=token,
-            expires_at=expires_at,
-            email_sent=email_sent,
-            smtp_configured=smtp_configured(),
-        )
-    return ForgotPasswordResponse(message=generic_message, email_sent=email_sent, smtp_configured=smtp_configured())
+    message = generic_message if email_sent else "Password reset code could not be emailed because SMTP is not configured."
+    return ForgotPasswordResponse(
+        message=message,
+        expires_at=expires_at,
+        email_sent=email_sent,
+        smtp_configured=smtp_configured(),
+    )
 
 
 def confirm_password_reset(payload: ResetPasswordRequest, db: Session) -> ResetPasswordResponse:

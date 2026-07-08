@@ -10,13 +10,15 @@ import {
   Palette,
   Phone,
   Ruler,
+  Trash2,
   UserCog,
   UserPlus,
   UserRound,
+  Upload,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
-import { changePassword as changeAccountPassword, getAuthSession } from '../lib/auth';
+import { changePassword as changeAccountPassword, getAuthSession, updateStoredAuthUser } from '../lib/auth';
 import { useTheme, useTranslation } from '../lib/i18n';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { RowActionMenu } from '../lib/tableActions';
@@ -154,6 +156,11 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
         phone: updated.phone || '',
         avatar: updated.profile_json?.avatar || profileForm.avatar,
       });
+      updateStoredAuthUser({
+        name: updated.full_name || updated.name || profileForm.full_name,
+        email: updated.email || profileForm.email,
+        avatarUrl: updated.profile_json?.avatar || profileForm.avatar || undefined,
+      });
       setMessage('Profile updated successfully.');
     } catch (err: any) {
       console.error('Failed to update owner profile:', err);
@@ -232,11 +239,24 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
               <UserCog className="h-4 w-4" />
               Edit Profile
             </div>
-            <label className="mb-4 flex w-fit cursor-pointer items-center gap-3 rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-4 py-3 text-sm font-semibold text-cyan-200 hover:border-cyan-400">
+            <div className="mb-4 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-[#0d3660] bg-[#020b18]/70 px-4 py-3">
               <img className="h-12 w-12 rounded-full object-cover" src={profileForm.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ownerName}&backgroundColor=0a2a47`} alt={ownerName} />
-              Edit Profile Picture
-              <input type="file" accept="image/*" className="hidden" onChange={(event) => handleProfileImage(event.target.files?.[0] || null)} />
-            </label>
+              <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-cyan-300/40 px-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/10">
+                <Upload className="h-4 w-4" />
+                Upload Picture
+                <input type="file" accept="image/*" className="hidden" onChange={(event) => handleProfileImage(event.target.files?.[0] || null)} />
+              </label>
+              {profileForm.avatar && (
+                <button
+                  type="button"
+                  onClick={() => setProfileForm((current) => ({ ...current, avatar: '' }))}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-400/40 px-3 text-sm font-semibold text-red-200 hover:bg-red-400/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remove
+                </button>
+              )}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Full Name" value={profileForm.full_name} onChange={(value) => setProfileForm((current) => ({ ...current, full_name: value }))} />
               <Field label="Role" value={ownerRole} readOnly />

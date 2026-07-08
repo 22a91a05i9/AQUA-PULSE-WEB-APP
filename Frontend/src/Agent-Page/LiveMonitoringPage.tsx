@@ -6,11 +6,6 @@ import {
   Wind,
   Sun,
   Sunset,
-  Cpu,
-  Wifi,
-  AlertCircle,
-  Clock,
-  Battery,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -104,7 +99,7 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
     );
   }
 
-  const siteReadings = data?.recent_readings || [];
+  const siteReadings: any[] = data?.recent_readings || [];
   const filteredReadings = selectedPond === 'all' 
     ? siteReadings 
     : siteReadings.filter((r: any) => r.site_id?.toString() === selectedPond);
@@ -118,7 +113,7 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
     {
       label: 'Temperature',
       value: latestReading ? latestReading.temperature_c.toFixed(1) : '28.1',
-      unit: '°C',
+      unit: 'deg C',
       status: latestReading ? (latestReading.temperature_c < 20 || latestReading.temperature_c > 35 ? 'Critical' : 'Normal') : 'Normal',
       color: '#22d3ee',
       icon: Thermometer,
@@ -163,7 +158,7 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
     return coords[index % coords.length];
   };
 
-  const pondStatusMarkers = (data?.assigned_sites || []).map((site: any, idx: number) => {
+  const pondStatusMarkers = ((data?.assigned_sites || []) as any[]).map((site: any, idx: number) => {
     const siteAlerts = (data?.alerts || []).filter((a: any) => a.site_id === site.id && a.status === 'open');
     let status = 'healthy';
     if (siteAlerts.some((a: any) => a.severity === 'critical')) {
@@ -181,7 +176,7 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
     };
   });
 
-  const rawDevicesList = data?.devices || [];
+  const rawDevicesList: any[] = data?.devices || [];
   const filteredDevicesList = selectedPond === 'all'
     ? rawDevicesList
     : rawDevicesList.filter((d: any) => d.site_id?.toString() === selectedPond);
@@ -211,7 +206,7 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
     };
   });
 
-  const rawAlerts = data?.alerts || [];
+  const rawAlerts: any[] = data?.alerts || [];
   const filteredAlerts = selectedPond === 'all'
     ? rawAlerts
     : rawAlerts.filter((a: any) => a.site_id?.toString() === selectedPond);
@@ -421,9 +416,6 @@ export default function LiveMonitoringPage({ onNavigate }: { onNavigate?: (page:
           <div className="glass rounded-xl p-5 border border-slate-800">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-white">Live Water Quality</h3>
-              <select className="bg-transparent border-none text-xs text-slate-400 focus:outline-none">
-                <option value="all">All Parameters</option>
-              </select>
             </div>
 
             {/* Quick stats indicators */}

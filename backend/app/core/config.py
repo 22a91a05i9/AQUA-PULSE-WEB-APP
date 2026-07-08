@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     smtp_from_name: str = Field(default="Aqua Monitoring System", alias="SMTP_FROM_NAME")
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
     smtp_use_ssl: bool = Field(default=False, alias="SMTP_USE_SSL")
+    frontend_base_url: str = Field(default="http://localhost:5173", alias="FRONTEND_BASE_URL")
 
     cors_origins: list[str] = Field(default=["*"], alias="CORS_ORIGINS")
     trusted_hosts: list[str] = Field(default=["*"], alias="TRUSTED_HOSTS")

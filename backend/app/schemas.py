@@ -61,14 +61,13 @@ class ForgotPasswordRequest(BaseModel):
 
 class ForgotPasswordResponse(BaseModel):
     message: str
-    reset_token: str | None = None
     expires_at: datetime | None = None
     email_sent: bool = False
     smtp_configured: bool = False
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(min_length=20)
+    token: str = Field(min_length=5, max_length=5, pattern=r"^\d{5}$")
     new_password: str = Field(min_length=8)
 
     @field_validator("new_password")

@@ -9,6 +9,7 @@ import {
   Calendar,
   Filter,
   Check,
+  X,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
@@ -21,10 +22,21 @@ interface AlertItem {
   details: string;
   device: string;
   deviceType: string;
+  deviceId: string;
+  readingId: string;
+  siteId: string;
+  metric: string;
+  actualValue: string;
+  thresholdRange: string;
   pond: string;
   zone: string;
   time: string;
   status: string;
+}
+
+interface AgentDeviceOption {
+  id: string;
+  label: string;
 }
 
 const severityColors: Record<string, string> = {
@@ -37,16 +49,28 @@ const severityColors: Record<string, string> = {
 const statusColors: Record<string, string> = {
   open: '#ef4444',
   acknowledged: '#f59e0b',
-  resolved: '#10b981',
-  safe: '#10b981',
+  completed: '#10b981',
 };
+
+function formatAlertValue(value: unknown, fallback = 'Not available') {
+  return value === null || value === undefined || value === '' ? fallback : String(value);
+}
 
 export default function AlertsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
+  const [deviceFilter, setDeviceFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'devices'>('all');
   const [alertsList, setAlertsList] = useState<AlertItem[]>([]);
+  const [agentDevices, setAgentDevices] = useState<AgentDeviceOption[]>([]);
+  const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const normalizeStatus = (status: string) => {
+    const normalized = (status || 'open').toLowerCase();
+    return normalized === 'resolved' || normalized === 'safe' ? 'completed' : normalized;
+  };
 
   async function loadAlerts() {
     try {
@@ -55,18 +79,35 @@ export default function AlertsPage() {
         const res = await apiRequest<any[]>('/readings/alerts/me', {
           token: session.token,
         });
+        const overview = await apiRequest<any>('/agent/overview', {
+          token: session.token,
+        }).catch(() => null);
+        const devices: AgentDeviceOption[] = ((overview?.devices || []) as any[]).map((device: any) => ({
+          id: String(device.id),
+          label: device.device_uid ? `${device.device_uid}` : `Device #${device.id}`,
+        }));
+        setAgentDevices(devices);
         
         const mapped = res.map((a: any) => ({
           id: a.id.toString(),
           severity: a.severity || 'warning',
           message: a.title || 'Water Quality Alert',
           details: a.message || `Metric ${a.metric} went out of bounds (value: ${a.actual_value})`,
-          device: `Device #${a.device_id}`,
+          device: devices.find((device) => device.id === String(a.device_id))?.label || `Device #${a.device_id}`,
+          deviceId: String(a.device_id),
+          readingId: a.reading_id ? String(a.reading_id) : 'Not available',
+          siteId: a.site_id ? String(a.site_id) : 'Not assigned',
+          metric: a.metric || 'Unknown metric',
+          actualValue: formatAlertValue(a.actual_value),
+          thresholdRange: [
+            a.threshold_min === null || a.threshold_min === undefined ? null : `Min ${a.threshold_min}`,
+            a.threshold_max === null || a.threshold_max === undefined ? null : `Max ${a.threshold_max}`,
+          ].filter(Boolean).join(' / ') || 'No threshold recorded',
           deviceType: a.metric ? `${a.metric} Sensor` : 'Sensor',
-          pond: `Site #${a.site_id}`,
+          pond: a.site_id ? `Site #${a.site_id}` : 'Unassigned site',
           zone: 'Standard Zone',
           time: new Date(a.created_at).toLocaleString(),
-          status: a.status || 'open',
+          status: normalizeStatus(a.status || 'open'),
         }));
         setAlertsList(mapped);
       }
@@ -127,6 +168,8 @@ export default function AlertsPage() {
       alert.device.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesSeverity = severityFilter === 'all' || alert.severity.toLowerCase() === severityFilter.toLowerCase();
+    const matchesDevice = deviceFilter === 'all' || alert.deviceId === deviceFilter;
+    const matchesStatus = statusFilter === 'all' || alert.status === statusFilter;
     
     let matchesTab = true;
     if (activeTab === 'active') {
@@ -135,7 +178,7 @@ export default function AlertsPage() {
       matchesTab = alert.deviceType.toLowerCase().includes('sensor');
     }
 
-    return matchesSearch && matchesSeverity && matchesTab;
+    return matchesSearch && matchesSeverity && matchesDevice && matchesStatus && matchesTab;
   });
 
   const exportAlerts = () => {
@@ -235,16 +278,26 @@ export default function AlertsPage() {
           <option value="info">Info</option>
         </select>
 
-        <select className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]">
+        <select
+          value={deviceFilter}
+          onChange={(e) => setDeviceFilter(e.target.value)}
+          className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]"
+        >
           <option value="all">All Devices</option>
+          {agentDevices.map((device) => (
+            <option key={device.id} value={device.id}>{device.label}</option>
+          ))}
         </select>
 
-        <select className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]">
-          <option value="all">All Types</option>
-        </select>
-
-        <select className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="h-9 rounded-lg border border-slate-700/50 bg-[#041526]/50 px-3 text-xs text-slate-300 focus:outline-none focus:border-[#06b6d4]"
+        >
           <option value="all">All Status</option>
+          <option value="open">Open</option>
+          <option value="acknowledged">Acknowledged</option>
+          <option value="completed">Completed</option>
         </select>
       </div>
 
@@ -310,7 +363,7 @@ export default function AlertsPage() {
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center justify-center gap-2">
-                      {alert.status !== 'safe' && alert.status !== 'resolved' && (
+                      {alert.status !== 'completed' && (
                         <button
                           onClick={() => handleVerifyAlert(alert.id)}
                           className="p-1.5 rounded-lg hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 transition"
@@ -319,7 +372,11 @@ export default function AlertsPage() {
                           <Check className="w-4 h-4" />
                         </button>
                       )}
-                      <button className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition">
+                      <button
+                        onClick={() => setSelectedAlert(alert)}
+                        className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                        title="View Alert Details"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
                       <RowActionMenu onEdit={() => window.alert(`Editing alert ${alert.id}`)} onDelete={() => handleDeleteAlert(alert.id)} />
@@ -356,6 +413,73 @@ export default function AlertsPage() {
           </div>
         </div>
       </div>
+
+      {selectedAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-cyan-300/20 bg-[#06162b] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase text-cyan-300">Alert Details</p>
+                <h2 className="mt-1 text-xl font-extrabold text-white">{selectedAlert.message}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAlert(null)}
+                className="rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="grid gap-4 p-5 md:grid-cols-2">
+              {[
+                ['Alert ID', selectedAlert.id],
+                ['Reading ID', selectedAlert.readingId],
+                ['Severity', selectedAlert.severity],
+                ['Status', selectedAlert.status],
+                ['Device', selectedAlert.device],
+                ['Device ID', selectedAlert.deviceId],
+                ['Site ID', selectedAlert.siteId],
+                ['Device Type', selectedAlert.deviceType],
+                ['Metric', selectedAlert.metric],
+                ['Actual Value', selectedAlert.actualValue],
+                ['Threshold', selectedAlert.thresholdRange],
+                ['Time', selectedAlert.time],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-slate-800 bg-[#041526]/70 p-4">
+                  <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+                  <p className="mt-2 text-sm font-semibold capitalize text-white">{value}</p>
+                </div>
+              ))}
+              <div className="rounded-lg border border-slate-800 bg-[#041526]/70 p-4 md:col-span-2">
+                <p className="text-xs font-bold uppercase text-slate-500">Description</p>
+                <p className="mt-2 text-sm leading-6 text-slate-200">{selectedAlert.details}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-800 px-5 py-4">
+              {selectedAlert.status !== 'completed' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleVerifyAlert(selectedAlert.id);
+                    setSelectedAlert(null);
+                  }}
+                  className="rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/25"
+                >
+                  Mark Completed
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedAlert(null)}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -36,9 +36,13 @@ interface AlertNotificationResponse {
 }
 
 export default function Header({ title, subtitle, actions, user, onNavigate }: HeaderProps) {
+  const [profileUser, setProfileUser] = useState<Partial<AuthUser>>({});
+  const displayName = profileUser.name || user.name;
+  const displayEmail = profileUser.email || user.email;
   const avatarUrl =
+    profileUser.avatarUrl ||
     user.avatarUrl ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}&backgroundColor=0a2a47`;
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=0a2a47`;
   const roleLabel = user.role.charAt(0).toUpperCase() + user.role.slice(1);
   const { t } = useTranslation();
 
@@ -56,6 +60,35 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
   // Refs for click outside
   const calendarRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const session = getAuthSession();
+        if (!session) return;
+
+        const settings = await apiRequest<any>('/settings', {
+          token: session.token,
+        });
+        const profile = settings.profile_json || {};
+        setProfileUser({
+          name: profile.full_name || session.user.name,
+          email: profile.email || session.user.email,
+          avatarUrl: profile.avatar || profile.avatarUrl || session.user.avatarUrl,
+        });
+      } catch (err) {
+        console.error('Failed to load header profile:', err);
+      }
+    }
+
+    const handleProfileUpdated = (event: Event) => {
+      setProfileUser((event as CustomEvent<Partial<AuthUser>>).detail || {});
+    };
+
+    loadProfile();
+    window.addEventListener('aqua-pulse-profile-updated', handleProfileUpdated);
+    return () => window.removeEventListener('aqua-pulse-profile-updated', handleProfileUpdated);
+  }, [user.email, user.name]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -306,12 +339,12 @@ export default function Header({ title, subtitle, actions, user, onNavigate }: H
         <button className="flex items-center gap-3 rounded-xl transition-all">
           <img
             src={avatarUrl}
-            alt={user.name}
+            alt={displayName}
             className="h-11 w-11 rounded-full border-2 border-slate-300/40"
           />
           <div className="hidden md:block text-left">
-            <p className="text-sm font-bold text-white">{user.name}</p>
-            <p className="text-xs text-slate-300">{roleLabel}</p>
+            <p className="text-sm font-bold text-white">{displayName}</p>
+            <p className="text-xs text-slate-300">{displayEmail || roleLabel}</p>
           </div>
         </button>
       </div>

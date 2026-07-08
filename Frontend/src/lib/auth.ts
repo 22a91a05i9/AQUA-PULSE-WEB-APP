@@ -12,7 +12,6 @@ export interface LoginCredentials {
 
 export interface ForgotPasswordResponse {
   message: string;
-  reset_token?: string | null;
   expires_at?: string | null;
   email_sent?: boolean;
   smtp_configured?: boolean;
@@ -97,6 +96,25 @@ export function getAuthSession(): AuthSession | null {
 
 export function clearAuthSession() {
   localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+export function updateStoredAuthUser(updates: Partial<AuthUser>): AuthSession | null {
+  const session = getAuthSession();
+  if (!session) {
+    return null;
+  }
+
+  const updatedSession = {
+    ...session,
+    user: {
+      ...session.user,
+      ...updates,
+      role: normalizeRole(updates.role || session.user.role),
+    },
+  };
+  saveAuthSession(updatedSession);
+  window.dispatchEvent(new CustomEvent('aqua-pulse-profile-updated', { detail: updatedSession.user }));
+  return updatedSession;
 }
 
 export async function login(credentials: LoginCredentials): Promise<AuthSession> {

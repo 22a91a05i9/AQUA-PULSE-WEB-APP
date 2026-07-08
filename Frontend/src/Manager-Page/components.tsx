@@ -11,7 +11,7 @@ import {
   CircleDot,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { AuthSession } from '../lib/auth';
+import type { AuthSession, AuthUser } from '../lib/auth';
 import { apiRequest } from '../lib/api';
 import { managerNavItems, managerQuickCards, managerUser, statusColors } from './data';
 
@@ -252,6 +252,13 @@ interface AlertNotificationResponse {
 }
 
 function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession; onLogout: () => void; onNavigate?: (page: ManagerPageId) => void }) {
+  const [profileUser, setProfileUser] = useState<Partial<AuthUser>>({});
+  const displayName = profileUser.name || session.user.name || managerUser.name;
+  const displayEmail = profileUser.email || session.user.email || managerUser.email;
+  const avatarUrl =
+    profileUser.avatarUrl ||
+    session.user.avatarUrl ||
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=0a2a47`;
   // Popover States
   const [showCalendar, setShowCalendar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -266,6 +273,32 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
   // Refs for click outside
   const calendarRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const settings = await apiRequest<any>('/settings', {
+          token: session.token,
+        });
+        const profile = settings.profile_json || {};
+        setProfileUser({
+          name: profile.full_name || session.user.name,
+          email: profile.email || session.user.email,
+          avatarUrl: profile.avatar || profile.avatarUrl || session.user.avatarUrl,
+        });
+      } catch (err) {
+        console.error('Failed to load manager header profile:', err);
+      }
+    }
+
+    const handleProfileUpdated = (event: Event) => {
+      setProfileUser((event as CustomEvent<Partial<AuthUser>>).detail || {});
+    };
+
+    loadProfile();
+    window.addEventListener('aqua-pulse-profile-updated', handleProfileUpdated);
+    return () => window.removeEventListener('aqua-pulse-profile-updated', handleProfileUpdated);
+  }, [session.token, session.user.avatarUrl, session.user.email, session.user.name]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -508,12 +541,12 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
         >
           <img
             className="h-10 w-10 rounded-full"
-            src={session.user.avatarUrl}
-            alt={session.user.name}
+            src={avatarUrl}
+            alt={displayName}
           />
           <div className="hidden text-left md:block">
-            <p className="text-sm font-bold text-white">{managerUser.name}</p>
-            <p className="text-xs text-slate-300">{managerUser.email}</p>
+            <p className="text-sm font-bold text-white">{displayName}</p>
+            <p className="text-xs text-slate-300">{displayEmail}</p>
           </div>
         </button>
         <button
