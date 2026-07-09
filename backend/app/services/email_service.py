@@ -57,6 +57,7 @@ def _record_delivery(
     db,
     *,
     event_type: str,
+    channel: str = "email",
     recipient: User,
     subject: str,
     status: str,
@@ -66,7 +67,7 @@ def _record_delivery(
 ) -> None:
     delivery = NotificationDelivery(
         event_type=event_type,
-        channel="email",
+        channel=channel,
         recipient_user_id=recipient.id,
         recipient_email=recipient.email,
         subject=subject,

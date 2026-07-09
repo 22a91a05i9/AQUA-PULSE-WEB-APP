@@ -55,6 +55,7 @@ interface EmergencyIncident {
 
 interface NotificationDelivery {
   id: number;
+  channel?: string;
   recipient_email: string;
   status: string;
   sent_at?: string | null;
@@ -169,15 +170,20 @@ export default function SosEmergencyPage({ onBackToDashboard }: { onBackToDashbo
       const createdDetail = refreshed.find((item) => item.id === created.id) || created;
       setIncident(createdDetail);
       const deliveries = createdDetail.deliveries || [];
-      const failedDeliveries = deliveries.filter((delivery) => ['failed', 'skipped'].includes(String(delivery.status).toLowerCase()));
-      if (deliveries.length === 0) {
-        setError('SOS button pressed and SOS was created, but mail notification status was not recorded.');
-      } else if (failedDeliveries.length === deliveries.length) {
+      const requiredDeliveries = deliveries.filter((delivery) => {
+        const channel = String(delivery.channel || '').toLowerCase();
+        const reason = String(delivery.error_message || '').toLowerCase();
+        return !(channel === 'push' && reason.includes('onesignal'));
+      });
+      const failedDeliveries = requiredDeliveries.filter((delivery) => ['failed', 'skipped'].includes(String(delivery.status).toLowerCase()));
+      if (requiredDeliveries.length === 0) {
+        setError('SOS button pressed and SOS was created, but notification status was not recorded.');
+      } else if (failedDeliveries.length === requiredDeliveries.length) {
         const reason = failedDeliveries[0]?.error_message ? ` Reason: ${failedDeliveries[0].error_message}` : '';
-        setError(`SOS button pressed and SOS was created, but all mail notifications failed or were skipped.${reason}`);
+        setError(`SOS button pressed and SOS was created, but all notifications failed or were skipped.${reason}`);
       } else if (failedDeliveries.length > 0) {
         const reason = failedDeliveries[0]?.error_message ? ` Reason: ${failedDeliveries[0].error_message}` : '';
-        setActionMessage(`SOS was created, but one or more mail notifications failed or were skipped.${reason}`);
+        setActionMessage(`SOS was created, but one or more notifications failed or were skipped.${reason}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to send SOS emergency.';

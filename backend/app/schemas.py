@@ -521,6 +521,43 @@ class NotificationDeliveryOut(BaseModel):
     sent_at: datetime | None = None
 
 
+class PushConfigOut(BaseModel):
+    enabled: bool
+    provider: str = "onesignal"
+    app_id: str | None = None
+
+
+class PushSubscriptionUpsert(BaseModel):
+    provider: str = "onesignal"
+    subscription_id: str = Field(min_length=8, max_length=255)
+    device_label: str | None = Field(default=None, max_length=120)
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized != "onesignal":
+            raise ValueError("Only OneSignal push subscriptions are supported.")
+        return normalized
+
+    @field_validator("subscription_id")
+    @classmethod
+    def trim_subscription_id(cls, value: str) -> str:
+        return value.strip()
+
+
+class PushSubscriptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    provider: str
+    subscription_id: str
+    device_label: str | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class EmergencyDetailOut(EmergencyOut):
     triggered_by_name: str | None = None
     triggered_by_email: str | None = None

@@ -8,35 +8,10 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import EmergencyIncident, NotificationDelivery, Site, SiteAgentAssignment, User
 from app.schemas import EmergencyCreate, EmergencyDetailOut, EmergencyOut, NotificationDeliveryOut
-from app.services.email_service import send_emergency_email
+from app.services.emergency_notifications import notify_emergency_recipients
 
 
 router = APIRouter(prefix="/emergencies", tags=["emergencies"])
-
-
-def emergency_recipients(db: Session, incident: EmergencyIncident, triggered_by: User) -> list[User]:
-    recipients: list[User] = []
-    owner: User | None = None
-
-    if incident.site_id:
-        site = db.scalar(select(Site).where(Site.id == incident.site_id))
-        if site and site.owner:
-            owner = site.owner
-
-    if owner is None and triggered_by.owner_user_id:
-        owner = db.scalar(select(User).where(User.id == triggered_by.owner_user_id, User.role == "owner"))
-
-    if owner and owner.is_active:
-        recipients.append(owner)
-
-    managers = db.scalars(select(User).where(User.role == "manager", User.is_active.is_(True))).all()
-    recipients.extend(managers)
-
-    deduped: dict[int, User] = {}
-    for recipient in recipients:
-        if recipient.id != triggered_by.id:
-            deduped[recipient.id] = recipient
-    return list(deduped.values())
 
 
 @router.get("", response_model=list[EmergencyOut])
@@ -187,8 +162,7 @@ def create_emergency(
     db.commit()
     db.refresh(incident)
 
-    for recipient in emergency_recipients(db, incident, current_user):
-        send_emergency_email(recipient, incident, current_user, db)
+    notify_emergency_recipients(db, incident, current_user)
 
     return EmergencyOut.model_validate(incident)
 

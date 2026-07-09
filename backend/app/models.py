@@ -261,6 +261,22 @@ class NotificationDelivery(Base):
     alert: Mapped["Alert | None"] = relationship("Alert")
 
 
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (UniqueConstraint("provider", "subscription_id", name="uq_push_provider_subscription"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(30), default="onesignal")
+    subscription_id: Mapped[str] = mapped_column(String(255))
+    device_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", backref="push_subscriptions")
+
+
 class Report(Base):
     __tablename__ = "reports"
 

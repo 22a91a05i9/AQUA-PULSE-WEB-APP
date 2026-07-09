@@ -16,6 +16,7 @@ import ManagerApp from './Manager-Page/ManagerApp';
 import OwnerApp from './Owner-Page/OwnerApp';
 import { getAuthSession, logout, type AuthSession } from './lib/auth';
 import { apiRequest } from './lib/api';
+import { registerEmergencyPushNotifications } from './lib/pushNotifications';
 
 const agentPageTitles: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Agent Dashboard', subtitle: '' },
@@ -44,6 +45,14 @@ export default function App() {
     setSession(null);
     setCurrentPage('login');
   };
+
+  useEffect(() => {
+    if (!session) return;
+
+    registerEmergencyPushNotifications(session).catch((error) => {
+      console.error('Emergency push registration failed:', error);
+    });
+  }, [session]);
 
   const isPasswordResetRoute = window.location.pathname.includes('reset-password');
 

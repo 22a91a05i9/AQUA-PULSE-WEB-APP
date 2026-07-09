@@ -104,6 +104,23 @@ def apply_schema_patches(engine: Engine) -> None:
                     """
                 )
             )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS push_subscriptions (
+                        id INTEGER PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        provider VARCHAR(30) NOT NULL DEFAULT 'onesignal',
+                        subscription_id VARCHAR(255) NOT NULL,
+                        device_label VARCHAR(120),
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_push_provider_subscription UNIQUE (provider, subscription_id)
+                    )
+                    """
+                )
+            )
             emergency_columns = connection.execute(text("PRAGMA table_info(emergency_incidents)")).mappings().all()
             emergency_column_names = {column["name"] for column in emergency_columns}
             if "accepted_by_user_id" not in emergency_column_names:
@@ -277,6 +294,23 @@ def apply_schema_patches(engine: Engine) -> None:
                         emergency_id INTEGER REFERENCES emergency_incidents(id) ON DELETE SET NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         sent_at TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS push_subscriptions (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        provider VARCHAR(30) NOT NULL DEFAULT 'onesignal',
+                        subscription_id VARCHAR(255) NOT NULL,
+                        device_label VARCHAR(120),
+                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_push_provider_subscription UNIQUE (provider, subscription_id)
                     )
                     """
                 )

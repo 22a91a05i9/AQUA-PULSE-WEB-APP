@@ -9,7 +9,7 @@ from sqlalchemy import inspect
 
 from app.core.config import settings
 from app.db import SessionLocal, engine
-from app.routers import agent, analytics, auth, emergencies, manager, meta, owner, readings, reports, user_settings
+from app.routers import agent, analytics, auth, emergencies, manager, meta, owner, push, readings, reports, user_settings
 from app.schema_patches import apply_schema_patches
 from app.seed_data import seed_database
 
@@ -121,3 +121,4 @@ app.include_router(analytics.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(user_settings.router, prefix="/api")
 app.include_router(emergencies.router, prefix="/api")
+app.include_router(push.router, prefix="/api")

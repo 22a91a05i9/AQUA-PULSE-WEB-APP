@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Alert, Reading, SiteAgentAssignment
+from app.services.emergency_notifications import create_auto_sos_for_critical_alerts
 from app.services.email_service import send_alert_summary_email
 
 
@@ -91,6 +92,8 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
 
         for grouped_alerts in recipient_alert_map.values():
             send_alert_summary_email(grouped_alerts[0].recipient, grouped_alerts, db)
+
+        create_auto_sos_for_critical_alerts(db, created_alerts)
 
     return created_alerts
 
