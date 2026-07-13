@@ -6,6 +6,7 @@ from html import escape
 
 from app.core.config import settings
 from app.models import Alert, EmergencyIncident, NotificationDelivery, User
+from app.services.localization import label, user_language
 
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,12 @@ def _metric_label(metric: str) -> str:
     return mapping.get(metric, metric.replace("_", " ").title())
 
 
+def _metric_label_for_user(metric: str, recipient: User) -> str:
+    lang = user_language(recipient)
+    localized = label(metric, lang)
+    return localized if localized != metric else _metric_label(metric)
+
+
 def _alert_direction(alert: Alert) -> str:
     if alert.threshold_min is not None and alert.actual_value < alert.threshold_min:
         return "low"
@@ -153,9 +160,26 @@ def send_alert_summary_email(recipient: User, alerts: list[Alert], db=None) -> b
 
     highest_severity = "critical" if any(alert.severity == "critical" for alert in actionable_alerts) else "warning"
     primary_alert = actionable_alerts[0]
+    lang = user_language(recipient)
     site_name = primary_alert.site.name if primary_alert.site else "-"
     device_name = primary_alert.device.device_uid if primary_alert.device else str(primary_alert.device_id)
-    subject = f"[{highest_severity.upper()}] {len(actionable_alerts)} alert(s) for {site_name}"
+    subject = f"[{highest_severity.upper()}] {len(actionable_alerts)} {label('alerts', lang) if lang != 'en' else 'alert(s)'} - {site_name}"
+
+    for setting in getattr(recipient, "settings", []) or []:
+        prefs = setting.notification_prefs
+        if isinstance(prefs, dict) and prefs.get("email_alerts") is False:
+            if db is not None:
+                _record_delivery(
+                    db,
+                    event_type="alert",
+                    recipient=recipient,
+                    subject=subject,
+                    status="skipped",
+                    error_message="Email notifications are disabled for this user.",
+                    alert_id=primary_alert.id,
+                )
+                db.commit()
+            return False
 
     if not smtp_is_configured():
         logger.info(
@@ -184,11 +208,11 @@ def send_alert_summary_email(recipient: User, alerts: list[Alert], db=None) -> b
     text_lines = [
         f"Hello {recipient.full_name},",
         "",
-        "The Aqua Monitoring System detected alert(s) that require attention.",
+        "The Aqua Monitoring System detected alert(s) that require attention." if lang == "en" else "Aqua Pulseలో మీ దృష్టి అవసరమైన హెచ్చరికలు గుర్తించబడ్డాయి." if lang == "te" else "Aqua Pulse ने ध्यान देने योग्य अलर्ट पहचाने हैं।",
         "",
-        f"Site: {site_name}",
+        f"{label('site', lang)}: {site_name}",
         f"Device: {device_name}",
-        f"Highest Severity: {highest_severity}",
+        f"{label('priority', lang)}: {highest_severity}",
         "",
         "Alert Summary:",
     ]
@@ -198,10 +222,10 @@ def send_alert_summary_email(recipient: User, alerts: list[Alert], db=None) -> b
         precautions = _precautions_for_alert(alert)
         text_lines.extend(
             [
-                f"{index}. {_metric_label(alert.metric)} [{alert.severity.upper()}]",
+                f"{index}. {_metric_label_for_user(alert.metric, recipient)} [{alert.severity.upper()}]",
                 f"   Actual Value: {alert.actual_value:.2f}",
                 f"   Allowed Range: {alert.threshold_min if alert.threshold_min is not None else '-'} to {alert.threshold_max if alert.threshold_max is not None else '-'}",
-                f"   Message: {alert.message}",
+                f"   {label('description', lang)}: {alert.message}",
                 "   Precautions:",
                 *[f"   - {item}" for item in precautions],
                 "",
@@ -215,7 +239,7 @@ def send_alert_summary_email(recipient: User, alerts: list[Alert], db=None) -> b
             f"""
             <div style="border:1px solid #e2e8f0;border-radius:16px;padding:18px;margin-bottom:14px;background:#ffffff;">
               <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
-                <strong style="font-size:16px;color:#0f172a;">{_metric_label(alert.metric)}</strong>
+                <strong style="font-size:16px;color:#0f172a;">{_metric_label_for_user(alert.metric, recipient)}</strong>
                 <span style="background:{severity_bg};color:{severity_color};padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;text-transform:uppercase;">{alert.severity}</span>
               </div>
               <p style="margin:14px 0 8px;color:#334155;"><strong>Actual Value:</strong> {alert.actual_value:.2f}</p>
@@ -288,8 +312,25 @@ def send_emergency_email(recipient: User, incident: EmergencyIncident, triggered
     if not recipient.email:
         return False
 
-    site_name = incident.site.name if incident.site else "Unspecified site"
-    subject = f"[SOS {incident.priority.upper()}] Emergency from {triggered_by.full_name}"
+    lang = user_language(recipient)
+    site_name = incident.site.name if incident.site else label("unspecified_site", lang)
+    subject = label("sos_subject", lang, priority=incident.priority.upper(), name=triggered_by.full_name)
+
+    for setting in getattr(recipient, "settings", []) or []:
+        prefs = setting.notification_prefs
+        if isinstance(prefs, dict) and prefs.get("email_alerts") is False:
+            if db is not None:
+                _record_delivery(
+                    db,
+                    event_type="emergency",
+                    recipient=recipient,
+                    subject=subject,
+                    status="skipped",
+                    error_message="Email notifications are disabled for this user.",
+                    emergency_id=incident.id,
+                )
+                db.commit()
+            return False
 
     if not smtp_is_configured():
         if db is not None:
@@ -313,16 +354,16 @@ def send_emergency_email(recipient: User, incident: EmergencyIncident, triggered
     lines = [
         f"Hello {recipient.full_name},",
         "",
-        "An SOS emergency was triggered in Aqua Pulse.",
+        label("email_intro", lang),
         "",
-        f"Triggered by: {triggered_by.full_name} ({triggered_by.role})",
-        f"Agent email: {triggered_by.email}",
-        f"Site: {site_name}",
-        f"Priority: {incident.priority}",
-        f"Description: {incident.description}",
-        f"Time: {incident.created_at.isoformat()} UTC",
+        f"{label('triggered_by', lang)}: {triggered_by.full_name} ({triggered_by.role})",
+        f"{label('agent_email', lang)}: {triggered_by.email}",
+        f"{label('site', lang)}: {site_name}",
+        f"{label('priority', lang)}: {incident.priority}",
+        f"{label('description', lang)}: {incident.description}",
+        f"{label('time', lang)}: {incident.created_at.isoformat()} UTC",
         "",
-        "Please open Aqua Pulse and respond immediately.",
+        label("email_action", lang),
     ]
     message.set_content("\n".join(lines))
     message.add_alternative(
@@ -332,18 +373,18 @@ def send_emergency_email(recipient: User, incident: EmergencyIncident, triggered
             <div style="max-width:680px;margin:0 auto;background:white;border-radius:18px;overflow:hidden;border:1px solid #e2e8f0;">
               <div style="padding:24px 28px;background:#b91c1c;color:white;">
                 <p style="margin:0 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;">Aqua Pulse SOS</p>
-                <h2 style="margin:0;font-size:26px;">Emergency Action Required</h2>
+                <h2 style="margin:0;font-size:26px;">{escape(label("email_heading", lang))}</h2>
               </div>
               <div style="padding:24px 28px;">
                 <p>Hello {escape(recipient.full_name)},</p>
-                <p>An SOS emergency was triggered by <strong>{escape(triggered_by.full_name)}</strong>.</p>
+                <p>{escape(label("email_intro", lang))} <strong>{escape(triggered_by.full_name)}</strong>.</p>
                 <table style="width:100%;border-collapse:collapse;margin-top:18px;">
-                  <tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;">Site</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">{escape(site_name)}</td></tr>
-                  <tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;">Priority</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">{escape(incident.priority.upper())}</td></tr>
-                  <tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;">Agent Email</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">{escape(triggered_by.email)}</td></tr>
-                  <tr><td style="padding:8px;color:#64748b;">Description</td><td style="padding:8px;">{escape(incident.description)}</td></tr>
+                  <tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;">{escape(label("site", lang))}</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">{escape(site_name)}</td></tr>
+                  <tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;">{escape(label("priority", lang))}</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">{escape(incident.priority.upper())}</td></tr>
+                  <tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;">{escape(label("agent_email", lang))}</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">{escape(triggered_by.email)}</td></tr>
+                  <tr><td style="padding:8px;color:#64748b;">{escape(label("description", lang))}</td><td style="padding:8px;">{escape(incident.description)}</td></tr>
                 </table>
-                <p style="margin-top:20px;padding:14px;border-radius:12px;background:#fef2f2;color:#991b1b;font-weight:700;">Please open Aqua Pulse and respond immediately.</p>
+                <p style="margin-top:20px;padding:14px;border-radius:12px;background:#fef2f2;color:#991b1b;font-weight:700;">{escape(label("email_action", lang))}</p>
               </div>
             </div>
           </body>

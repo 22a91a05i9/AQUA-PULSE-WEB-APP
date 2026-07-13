@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import Alert, Reading, SiteAgentAssignment
 from app.services.emergency_notifications import create_auto_sos_for_critical_alerts
 from app.services.email_service import send_alert_summary_email
+from app.services.localization import label, user_language
 
 
 def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
@@ -57,6 +58,9 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
         direction = "below" if is_low else "above"
 
         for recipient in recipients:
+            lang = user_language(recipient)
+            metric_label = label(metric, lang)
+            direction_label = label(direction, lang)
             alert = Alert(
                 reading_id=reading.id,
                 device_id=reading.device_id,
@@ -70,11 +74,8 @@ def create_alerts_for_reading(db: Session, reading: Reading) -> list[Alert]:
                 threshold_min=threshold_min,
                 threshold_max=threshold_max,
                 actual_value=actual_value,
-                title=f"{metric.upper()} threshold crossed",
-                message=(
-                    f"{metric} is {direction} the allowed range for site "
-                    f"{reading.site.name}. Actual value: {actual_value:.2f}."
-                ),
+                title=label("alert_title", lang, metric=metric_label),
+                message=label("alert_message", lang, metric=metric_label, direction=direction_label, site=reading.site.name, value=f"{actual_value:.2f}"),
                 sent_to_owner=recipient.role == "owner",
                 sent_to_agent=recipient.role == "agent",
             )

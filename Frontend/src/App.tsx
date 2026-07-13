@@ -17,6 +17,7 @@ import OwnerApp from './Owner-Page/OwnerApp';
 import { getAuthSession, logout, type AuthSession } from './lib/auth';
 import { apiRequest } from './lib/api';
 import { registerEmergencyPushNotifications } from './lib/pushNotifications';
+import { installPageTranslator, loadSavedLanguage } from './lib/i18n';
 
 const agentPageTitles: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Agent Dashboard', subtitle: '' },
@@ -49,10 +50,18 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
 
+    loadSavedLanguage().catch((error) => {
+      console.error('Language preference load failed:', error);
+    });
+
     registerEmergencyPushNotifications(session).catch((error) => {
       console.error('Emergency push registration failed:', error);
     });
   }, [session]);
+
+  useEffect(() => {
+    return installPageTranslator();
+  }, []);
 
   const isPasswordResetRoute = window.location.pathname.includes('reset-password');
 

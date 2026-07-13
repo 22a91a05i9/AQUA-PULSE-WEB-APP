@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Headphones, KeyRound, LockKeyhole, Mail, Send } from 'lucide-react';
 import { ApiError } from '../lib/api';
 import { login, requestPasswordReset, resetPassword, type AuthSession } from '../lib/auth';
+import { useTranslation } from '../lib/i18n';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 
 interface LoginPageProps {
@@ -11,6 +12,7 @@ interface LoginPageProps {
 type AuthMode = 'login' | 'forgot' | 'reset';
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
+  const { lang, changeLanguage } = useTranslation();
   const [authMode, setAuthMode] = useState<AuthMode>(() => {
     return window.location.pathname.includes('reset-password') ? 'reset' : 'login';
   });
@@ -124,6 +126,22 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <source src="/videos/login-underwater.mp4" type="video/mp4" />
         </video>
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(1,8,20,0.2),rgba(1,8,20,0.08)_45%,rgba(1,8,20,0.44)),radial-gradient(circle_at_72%_45%,rgba(6,182,212,0.16),transparent_32%)]" />
+        <div className="absolute right-4 top-4 z-[5] flex rounded-lg border border-cyan-300/25 bg-[#06162b]/75 p-1 backdrop-blur-md" data-no-translate>
+          {[
+            { code: 'en', label: 'EN' },
+            { code: 'hi', label: 'हिन्दी' },
+            { code: 'te', label: 'తెలుగు' },
+          ].map((item) => (
+            <button
+              key={item.code}
+              type="button"
+              onClick={() => changeLanguage(item.code)}
+              className={`h-8 rounded-md px-3 text-xs font-bold transition ${lang === item.code ? 'bg-cyan-400 text-slate-950' : 'text-cyan-100 hover:bg-cyan-300/10'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
 
         {authMode === 'login' && (
           <form

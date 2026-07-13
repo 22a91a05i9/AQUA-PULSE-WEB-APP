@@ -13,6 +13,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { AuthSession, AuthUser } from '../lib/auth';
 import { apiRequest } from '../lib/api';
+import { useTranslation } from '../lib/i18n';
 import { managerNavItems, managerQuickCards, managerUser, statusColors } from './data';
 
 export type ManagerPageId =
@@ -78,6 +79,7 @@ function ManagerMobileNav({
   onLogout: () => void;
   alertCount: number;
 }) {
+  const { t } = useTranslation();
   const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
@@ -123,7 +125,7 @@ function ManagerMobileNav({
               className={`mobile-nav-item ${active ? 'mobile-nav-item-active' : ''}`}
             >
               <Icon className="h-5 w-5 shrink-0" />
-              <span>{item.label}</span>
+              <span>{t(item.label)}</span>
             </button>
           );
         })}
@@ -141,6 +143,7 @@ function ManagerSidebar({
   onNavigate: (page: ManagerPageId) => void;
   alertCount: number;
 }) {
+  const { t } = useTranslation();
   const [lastUpdatedTime, setLastUpdatedTime] = useState('');
 
   useEffect(() => {
@@ -185,7 +188,7 @@ function ManagerSidebar({
               }`}
             >
               <Icon className="h-5 w-5 shrink-0" />
-              <span className="min-w-0 truncate">{item.label}</span>
+              <span className="min-w-0 truncate">{t(item.label)}</span>
               {badge ? (
                 <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
                   {badge}
@@ -218,8 +221,8 @@ function ManagerSidebar({
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">{card.label}</p>
-                  <p className="mt-1 text-xs text-slate-300">{displayValue || 'Loading...'}</p>
+                  <p className="text-sm font-bold text-white">{t(card.label)}</p>
+                  <p className="mt-1 text-xs text-slate-300">{displayValue === '6303403957' ? displayValue : t(displayValue || 'Loading...')}</p>
                 </div>
               </div>
             </div>
@@ -252,6 +255,7 @@ interface AlertNotificationResponse {
 }
 
 function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession; onLogout: () => void; onNavigate?: (page: ManagerPageId) => void }) {
+  const { t } = useTranslation();
   const [profileUser, setProfileUser] = useState<Partial<AuthUser>>({});
   const displayName = profileUser.name || session.user.name || managerUser.name;
   const displayEmail = profileUser.email || session.user.email || managerUser.email;
@@ -394,7 +398,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
           {showCalendar && (
             <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-bold text-white">Select Date</span>
+                <span className="text-sm font-bold text-white">{t('Select Date')}</span>
                 <span className="text-xs font-semibold text-cyan-400">
                   {today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </span>
@@ -408,7 +412,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
                     onClick={() => handlePresetSelect(preset)}
                     className="rounded bg-[#071f35] px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-[#0c3154] hover:text-white transition"
                   >
-                    {preset}
+                    {t(preset)}
                   </button>
                 ))}
               </div>
@@ -462,10 +466,10 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
             <div className="absolute right-0 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-[#0d3660] bg-[#031426]/95 p-4 shadow-2xl backdrop-blur-xl z-50 animate-fade-in text-left">
               <div className="mb-3 flex items-center justify-between border-b border-[#0d3660]/60 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">Notifications</span>
+                  <span className="font-bold text-white text-sm">{t('Notifications')}</span>
                   {unreadCount > 0 && (
                     <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-300">
-                      {unreadCount} new
+                      {unreadCount} {t('new')}
                     </span>
                   )}
                 </div>
@@ -474,7 +478,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
                     onClick={handleMarkAllRead}
                     className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
                   >
-                    Mark all read
+                    {t('Mark all read')}
                   </button>
                 )}
               </div>
@@ -483,7 +487,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
               <div className="max-h-72 overflow-y-auto space-y-2.5">
                 {notifications.length === 0 ? (
                   <div className="rounded-lg border border-[#0d3660]/50 bg-[#071f35]/30 p-4 text-center text-xs text-slate-400">
-                    No recent owner device alerts.
+                    {t('No recent owner device alerts.')}
                   </div>
                 ) : notifications.map((notification) => {
                   return (
@@ -527,7 +531,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
                   }}
                   className="text-xs font-bold text-cyan-400 hover:text-cyan-300 w-full"
                 >
-                  View All Notifications
+                  {t('View All Notifications')}
                 </button>
               </div>
             </div>
@@ -553,7 +557,7 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
           onClick={onLogout}
           className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white transition hover:bg-blue-500"
         >
-          Logout
+          {t('Logout')}
         </button>
       </div>
     </header>
@@ -561,19 +565,20 @@ function ManagerHeader({ session, onLogout, onNavigate }: { session: AuthSession
 }
 
 export function ControlCenter({ compact = false, onOpen }: { compact?: boolean; onOpen?: () => void }) {
+  const { t } = useTranslation();
   return (
     <section className="panel-surface rounded-lg border border-[#0d3660] bg-[#041526]/80 p-[clamp(1rem,2vw,1.75rem)] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-cyan-300">Manager Control Center</p>
-          <h2 className="safe-text mt-4 text-[clamp(1.35rem,2.2vw,2rem)] font-extrabold leading-tight text-white">Owners, devices, onboarding, and rollout visibility</h2>
+          <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-cyan-300">{t('Manager Control Center')}</p>
+          <h2 className="safe-text mt-4 text-[clamp(1.35rem,2.2vw,2rem)] font-extrabold leading-tight text-white">{t('Owners, devices, onboarding, and rollout visibility')}</h2>
           <p className="mt-4 max-w-5xl text-sm leading-6 text-slate-300">
-            Use this workspace to onboard owners, register monitoring devices, and control the first assignment flow before field operations begin.
+            {t('Use this workspace to onboard owners, register monitoring devices, and control the first assignment flow before field operations begin.')}
           </p>
         </div>
         {!compact && (
           <button onClick={onOpen} className="hidden h-12 items-center gap-3 rounded-lg border border-[#0d3660] px-5 text-sm font-semibold text-white transition hover:border-cyan-300 lg:flex">
-            Open Control Center
+            {t('Open Control Center')}
             <ChevronRight className="h-5 w-5" />
           </button>
         )}
@@ -583,11 +588,12 @@ export function ControlCenter({ compact = false, onOpen }: { compact?: boolean; 
 }
 
 export function PageTitle({ title, subtitle, actions }: { title: string; subtitle: string; actions?: React.ReactNode }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-6 mt-7 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="safe-text text-[clamp(1.5rem,2.4vw,2rem)] font-extrabold text-white">{title}</h1>
-        <p className="safe-text mt-2 text-slate-300">{subtitle}</p>
+        <h1 className="safe-text text-[clamp(1.5rem,2.4vw,2rem)] font-extrabold text-white">{t(title)}</h1>
+        <p className="safe-text mt-2 text-slate-300">{t(subtitle)}</p>
       </div>
       {actions}
     </div>
@@ -615,14 +621,15 @@ export function StatCard({
   icon: LucideIcon;
   tone?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <Panel className="metric-card">
       <div className="metric-card-row">
       <ToneIcon icon={Icon} tone={tone} />
       <div className="metric-copy">
-        <p className="metric-label text-white">{label}</p>
+        <p className="metric-label text-white">{t(label)}</p>
         <p className="metric-value mt-2 font-extrabold text-white">{value}</p>
-        {desc && <p className="metric-desc mt-2 text-slate-300">{desc}</p>}
+        {desc && <p className="metric-desc mt-2 text-slate-300">{t(desc)}</p>}
       </div>
       </div>
     </Panel>
@@ -647,10 +654,11 @@ export function ToneIcon({ icon: Icon, tone = 'blue' }: { icon: LucideIcon; tone
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   return (
     <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${statusColors[status] || statusColors.Active}`}>
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {status}
+      {t(status)}
     </span>
   );
 }
@@ -670,27 +678,29 @@ export function TablePager() {
 }
 
 export function Field({ label, placeholder, required = false }: { label: string; placeholder: string; required?: boolean }) {
+  const { t } = useTranslation();
   return (
     <label className="block">
       <span className="text-sm font-semibold text-white">
-        {label} {required && <span className="text-red-400">*</span>}
+        {t(label)} {required && <span className="text-red-400">*</span>}
       </span>
       <input
         className="mt-2 h-12 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300"
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
       />
     </label>
   );
 }
 
 export function SelectField({ label, placeholder, required = false }: { label: string; placeholder: string; required?: boolean }) {
+  const { t } = useTranslation();
   return (
     <label className="block">
       <span className="text-sm font-semibold text-white">
-        {label} {required && <span className="text-red-400">*</span>}
+        {t(label)} {required && <span className="text-red-400">*</span>}
       </span>
       <button className="mt-2 flex h-12 w-full items-center justify-between rounded-md border border-[#0d3660] bg-[#020b18]/50 px-4 text-left text-sm text-slate-300">
-        {placeholder}
+        {t(placeholder)}
         <ChevronDown className="h-4 w-4" />
       </button>
     </label>

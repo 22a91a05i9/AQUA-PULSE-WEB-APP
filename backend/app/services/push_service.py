@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.models import EmergencyIncident, NotificationDelivery, PushSubscription, User
+from app.services.localization import label, user_language
 
 
 logger = logging.getLogger(__name__)
@@ -70,9 +71,10 @@ def _post_onesignal(payload: dict) -> tuple[bool, str | None]:
 
 
 def send_emergency_push(recipient: User, incident: EmergencyIncident, triggered_by: User, db) -> bool:
-    site_name = incident.site.name if incident.site else "Unspecified site"
-    title = f"SOS {incident.priority.upper()}: {site_name}"
-    message = f"{triggered_by.full_name} triggered an emergency. Open Aqua Pulse now."
+    lang = user_language(recipient)
+    site_name = incident.site.name if incident.site else label("unspecified_site", lang)
+    title = label("push_title", lang, priority=incident.priority.upper(), site=site_name)
+    message = label("push_message", lang, name=triggered_by.full_name)
 
     if not push_is_configured():
         _record_push_delivery(
@@ -85,6 +87,20 @@ def send_emergency_push(recipient: User, incident: EmergencyIncident, triggered_
         )
         db.commit()
         return False
+
+    for setting in getattr(recipient, "settings", []) or []:
+        prefs = setting.notification_prefs
+        if isinstance(prefs, dict) and prefs.get("push_alerts") is False:
+            _record_push_delivery(
+                db,
+                recipient=recipient,
+                subject=title,
+                status="skipped",
+                error_message="Push notifications are disabled for this user.",
+                emergency_id=incident.id,
+            )
+            db.commit()
+            return False
 
     subscriptions = db.scalars(
         select(PushSubscription).where(

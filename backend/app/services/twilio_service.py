@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 from app.core.config import settings
 from app.models import EmergencyIncident, NotificationDelivery, User
+from app.services.localization import TWILIO_VOICE_LANGUAGE, label, user_language
 
 
 logger = logging.getLogger(__name__)
@@ -123,21 +124,37 @@ def _twilio_studio_post(path: str, values: dict[str, str]) -> tuple[bool, str | 
         return False, str(exc)
 
 
-def emergency_message(incident: EmergencyIncident, triggered_by: User) -> str:
-    site_name = incident.site.name if incident.site else "Unspecified site"
-    return (
-        f"Aqua Pulse SOS {incident.priority.upper()}: {triggered_by.full_name} triggered an emergency "
-        f"at {site_name}. Open Aqua Pulse immediately. Details: {incident.description}"
+def _pref_enabled(recipient: User, key: str, default: bool = True) -> bool:
+    for setting in getattr(recipient, "settings", []) or []:
+        prefs = setting.notification_prefs
+        if isinstance(prefs, dict) and key in prefs:
+            return bool(prefs[key])
+    return default
+
+
+def emergency_message(incident: EmergencyIncident, triggered_by: User, recipient: User) -> str:
+    lang = user_language(recipient)
+    site_name = incident.site.name if incident.site else label("unspecified_site", lang)
+    return label(
+        "sms",
+        lang,
+        priority=incident.priority.upper(),
+        name=triggered_by.full_name,
+        site=site_name,
+        description=incident.description,
     )[:1500]
 
 
 def emergency_flow_parameters(incident: EmergencyIncident, triggered_by: User, recipient: User) -> str:
-    site_name = incident.site.name if incident.site else "Unspecified site"
+    lang = user_language(recipient)
+    site_name = incident.site.name if incident.site else label("unspecified_site", lang)
     return json.dumps(
         {
             "incident_id": incident.id,
             "priority": incident.priority,
             "description": incident.description,
+            "language": lang,
+            "localized_message": emergency_message(incident, triggered_by, recipient),
             "site_name": site_name,
             "agent_name": triggered_by.full_name,
             "agent_email": triggered_by.email,
@@ -185,6 +202,10 @@ def send_emergency_sms(recipient: User, incident: EmergencyIncident, triggered_b
         _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="skipped", error_message="Emergency SMS is disabled.", emergency_id=incident.id)
         db.commit()
         return False
+    if not _pref_enabled(recipient, "sms_alerts", True):
+        _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="skipped", error_message="SMS notifications are disabled for this user.", emergency_id=incident.id)
+        db.commit()
+        return False
     if not to_phone:
         _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="skipped", error_message="Recipient has no valid phone number.", emergency_id=incident.id)
         db.commit()
@@ -199,7 +220,7 @@ def send_emergency_sms(recipient: User, incident: EmergencyIncident, triggered_b
         {
             "From": settings.twilio_from_phone,
             "To": to_phone,
-            "Body": emergency_message(incident, triggered_by),
+            "Body": emergency_message(incident, triggered_by, recipient),
         },
     )
     _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="sent" if sent else "failed", error_message=error_message, emergency_id=incident.id)
@@ -210,10 +231,15 @@ def send_emergency_sms(recipient: User, incident: EmergencyIncident, triggered_b
 def send_emergency_call(recipient: User, incident: EmergencyIncident, triggered_by: User, db) -> bool:
     subject = f"SOS call to {recipient.full_name}"
     to_phone = normalize_phone_number(recipient.phone)
-    site_name = incident.site.name if incident.site else "unspecified site"
+    lang = user_language(recipient)
+    site_name = incident.site.name if incident.site else label("unspecified_site", lang)
 
     if not settings.emergency_call_enabled:
         _record_delivery(db, recipient=recipient, channel="call", subject=subject, status="skipped", error_message="Emergency calls are disabled.", emergency_id=incident.id)
+        db.commit()
+        return False
+    if not _pref_enabled(recipient, "call_alerts", True):
+        _record_delivery(db, recipient=recipient, channel="call", subject=subject, status="skipped", error_message="Emergency calls are disabled for this user.", emergency_id=incident.id)
         db.commit()
         return False
     if not to_phone:
@@ -226,10 +252,11 @@ def send_emergency_call(recipient: User, incident: EmergencyIncident, triggered_
         return False
 
     spoken_message = escape(
-        f"Aqua Pulse emergency alert. SOS was triggered by {triggered_by.full_name} "
-        f"at {site_name}. Priority {incident.priority}. Please open Aqua Pulse and respond immediately."
+        label("call_message", lang, name=triggered_by.full_name, site=site_name, priority=incident.priority.upper())
     )
-    twiml = f"<Response><Say voice=\"alice\" language=\"en-IN\">{spoken_message}</Say><Pause length=\"1\"/><Say voice=\"alice\" language=\"en-IN\">This is an emergency SOS alert from Aqua Pulse.</Say></Response>"
+    repeat_message = escape(label("call_repeat", lang))
+    voice_language = TWILIO_VOICE_LANGUAGE.get(lang, "en-IN")
+    twiml = f"<Response><Say voice=\"alice\" language=\"{voice_language}\">{spoken_message}</Say><Pause length=\"1\"/><Say voice=\"alice\" language=\"{voice_language}\">{repeat_message}</Say></Response>"
 
     sent, error_message = _twilio_post(
         "Calls.json",

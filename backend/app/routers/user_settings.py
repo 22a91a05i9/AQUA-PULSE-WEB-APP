@@ -20,8 +20,8 @@ def get_settings(
     if not setting:
         setting = UserSetting(
             user_id=current_user.id,
-            profile_json={"full_name": current_user.full_name, "email": current_user.email, "phone": current_user.phone, "role": current_user.role},
-            notification_prefs={"email_alerts": True, "sms_alerts": False, "push_alerts": True, "weekly_report": True},
+            profile_json={"full_name": current_user.full_name, "email": current_user.email, "phone": current_user.phone, "role": current_user.role, "language": "en"},
+            notification_prefs={"email_alerts": True, "sms_alerts": False, "push_alerts": True, "call_alerts": True, "weekly_report": True, "language": "en"},
             alert_thresholds={"ph_min": 6.5, "ph_max": 8.5, "temp_min": 20.0, "temp_max": 35.0, "turbidity_max": 50.0},
         )
         db.add(setting)

@@ -251,10 +251,10 @@ export default function SettingsPage() {
   };
 
   const notifications = [
-    { label: 'Email Notifications', desc: 'Receive alerts and updates via email', icon: Mail, enabled: prefs.email_alerts, key: 'email_alerts' },
-    { label: 'SMS Notifications', desc: 'Receive critical alerts via SMS', icon: MessageCircle, enabled: prefs.sms_alerts, key: 'sms_alerts' },
-    { label: 'System Updates', desc: 'Important system updates and announcements', icon: Info, enabled: prefs.push_alerts, key: 'push_alerts' },
-    { label: 'Marketing Communications', desc: 'Product updates and other communications', icon: Megaphone, enabled: prefs.weekly_report, key: 'weekly_report' },
+    { label: t('Email Notifications'), desc: 'Receive alerts and updates via email', icon: Mail, enabled: prefs.email_alerts, key: 'email_alerts' },
+    { label: t('SMS Notifications'), desc: 'Receive critical alerts via SMS', icon: MessageCircle, enabled: prefs.sms_alerts, key: 'sms_alerts' },
+    { label: t('System Updates'), desc: 'Important system updates and announcements', icon: Info, enabled: prefs.push_alerts, key: 'push_alerts' },
+    { label: t('Marketing Communications'), desc: 'Product updates and other communications', icon: Megaphone, enabled: prefs.weekly_report, key: 'weekly_report' },
   ];
 
   return (
@@ -466,7 +466,7 @@ export default function SettingsPage() {
         {/* Notifications */}
         <div className="glass rounded-xl p-5 card-hover">
           <h3 className="text-xs font-semibold text-[#22d3ee] uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Settings className="w-4 h-4" /> Notifications
+            <Settings className="w-4 h-4" /> {t('Notifications')}
           </h3>
           <div className="space-y-3">
             {notifications.map((notif, i) => {
