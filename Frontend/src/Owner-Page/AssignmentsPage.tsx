@@ -3,6 +3,7 @@ import { ChevronDown, Cpu, MapPin, Settings, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
+import { DialogButton, ProjectDialog } from '../lib/projectDialog';
 
 const initialAssignments = {
   deviceId: '',
@@ -19,6 +20,11 @@ export default function AssignmentsPage() {
   const [sites, setSites] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingDeviceMove, setPendingDeviceMove] = useState<{
+    device: any;
+    currentSite: any | null;
+    nextSite: any;
+  } | null>(null);
 
   async function loadData() {
     try {
@@ -49,7 +55,7 @@ export default function AssignmentsPage() {
     setErrorMsg('');
   };
 
-  const assignDevice = async () => {
+  const performAssignDevice = async () => {
     if (!form.deviceId || !form.deviceSiteId) {
       setErrorMsg('Select a device and site before assigning.');
       return;
@@ -77,6 +83,31 @@ export default function AssignmentsPage() {
       console.error(err);
       setErrorMsg(err.message || 'Failed to assign device.');
     }
+  };
+
+  const assignDevice = async () => {
+    if (!form.deviceId || !form.deviceSiteId) {
+      setErrorMsg('Select a device and site before assigning.');
+      return;
+    }
+
+    const dev = devices.find(d => String(d.id) === form.deviceId);
+    const nextSite = sites.find(s => String(s.id) === form.deviceSiteId);
+    const currentSiteId = dev?.site_id == null ? '' : String(dev.site_id);
+    const nextSiteId = String(form.deviceSiteId);
+
+    if (dev && nextSite && currentSiteId && currentSiteId !== nextSiteId) {
+      const currentSite = sites.find(s => String(s.id) === currentSiteId) || null;
+      setPendingDeviceMove({ device: dev, currentSite, nextSite });
+      return;
+    }
+
+    if (dev && currentSiteId === nextSiteId) {
+      setErrorMsg(`Device "${dev.device_uid || dev.id}" is already assigned to this site.`);
+      return;
+    }
+
+    await performAssignDevice();
   };
 
   const assignAgent = async () => {
@@ -171,6 +202,27 @@ export default function AssignmentsPage() {
 
       {message && <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{message}</p>}
       {errorMsg && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{errorMsg}</p>}
+      {pendingDeviceMove && (
+        <ProjectDialog
+          title="Change Device Site?"
+          description={`Device "${pendingDeviceMove.device.device_uid || pendingDeviceMove.device.id}" is already assigned to "${pendingDeviceMove.currentSite?.name || `Site #${pendingDeviceMove.device.site_id}`}". Do you want to move it to "${pendingDeviceMove.nextSite.name}"?`}
+          onClose={() => setPendingDeviceMove(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setPendingDeviceMove(null)}>Cancel</DialogButton>
+              <DialogButton
+                tone="primary"
+                onClick={async () => {
+                  setPendingDeviceMove(null);
+                  await performAssignDevice();
+                }}
+              >
+                Confirm Change
+              </DialogButton>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

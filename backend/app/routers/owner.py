@@ -29,7 +29,7 @@ def owner_overview(
     db: Session = Depends(get_db),
 ):
     devices = db.scalars(select(Device).where(Device.owner_user_id == current_user.id).order_by(Device.created_at.desc())).all()
-    sites = db.scalars(select(Site).where(Site.owner_user_id == current_user.id).order_by(Site.created_at.desc())).all()
+    sites = db.scalars(select(Site).where(Site.owner_user_id == current_user.id).order_by(Site.id.asc())).all()
     agents = db.scalars(select(User).where(User.owner_user_id == current_user.id, User.role == "agent")).all()
     agent_assignments = db.scalars(
         select(SiteAgentAssignment)
@@ -219,7 +219,7 @@ def list_sites(
     current_user: User = Depends(require_role("owner")),
     db: Session = Depends(get_db),
 ):
-    sites = db.scalars(select(Site).where(Site.owner_user_id == current_user.id).order_by(Site.created_at.desc())).all()
+    sites = db.scalars(select(Site).where(Site.owner_user_id == current_user.id).order_by(Site.id.asc())).all()
     return [SiteOut.model_validate(item) for item in sites]
 
 

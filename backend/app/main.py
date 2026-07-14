@@ -34,36 +34,51 @@ def schema_ready() -> bool:
     return required_tables.issubset(existing_tables)
 
 
+def run_startup_database_tasks() -> bool:
+    if not schema_ready():
+        logger.warning("Database schema is not ready. Run the database bootstrap command before serving traffic.")
+        return False
+
+    apply_schema_patches(engine)
+    db = SessionLocal()
+    try:
+        seed_database(db)
+    finally:
+        db.close()
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     mqtt_client = None
     schedule_task = None
-    if schema_ready():
-        apply_schema_patches(engine)
-        db = SessionLocal()
+    startup_task = None
+
+    async def schedule_loop():
+        from app.routers.reports import run_due_report_schedules
+
+        while True:
+            await asyncio.sleep(60)
+            db = SessionLocal()
+            try:
+                generated = run_due_report_schedules(db)
+                if generated:
+                    logger.info("Generated %s scheduled reports", generated)
+            except Exception:
+                logger.exception("Scheduled report generation failed")
+            finally:
+                db.close()
+
+    async def startup_database_tasks():
         try:
-            seed_database(db)
-        finally:
-            db.close()
+            ready = await asyncio.to_thread(run_startup_database_tasks)
+            if ready:
+                logger.info("Database startup tasks completed")
+        except Exception:
+            logger.exception("Database startup tasks failed")
 
-        async def schedule_loop():
-            from app.routers.reports import run_due_report_schedules
-
-            while True:
-                await asyncio.sleep(60)
-                db = SessionLocal()
-                try:
-                    generated = run_due_report_schedules(db)
-                    if generated:
-                        logger.info("Generated %s scheduled reports", generated)
-                except Exception:
-                    logger.exception("Scheduled report generation failed")
-                finally:
-                    db.close()
-
-        schedule_task = asyncio.create_task(schedule_loop())
-    else:
-        logger.warning("Database schema is not ready. Run the database bootstrap command before serving traffic.")
+    startup_task = asyncio.create_task(startup_database_tasks())
+    schedule_task = asyncio.create_task(schedule_loop())
 
     if settings.mqtt_enabled:
         from app.mqtt_consumer import start_listener
@@ -72,6 +87,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    if startup_task is not None:
+        startup_task.cancel()
     if mqtt_client is not None:
         from app.mqtt_consumer import stop_listener
 

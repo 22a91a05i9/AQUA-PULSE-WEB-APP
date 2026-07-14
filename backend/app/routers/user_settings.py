@@ -11,6 +11,17 @@ from app.schemas import AgentContactCreate, AgentContactOut, AgentContactUpdate,
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
+def sync_profile_defaults(setting: UserSetting, current_user: User) -> None:
+    profile = dict(setting.profile_json or {})
+    profile.setdefault("full_name", current_user.full_name)
+    profile.setdefault("email", current_user.email)
+    profile.setdefault("role", current_user.role)
+    profile.setdefault("language", "en")
+    if not profile.get("phone") and current_user.phone:
+        profile["phone"] = current_user.phone
+    setting.profile_json = profile
+
+
 @router.get("", response_model=UserSettingOut)
 def get_settings(
     current_user: User = Depends(get_current_user),
@@ -27,6 +38,12 @@ def get_settings(
         db.add(setting)
         db.commit()
         db.refresh(setting)
+    else:
+        before = dict(setting.profile_json or {})
+        sync_profile_defaults(setting, current_user)
+        if setting.profile_json != before:
+            db.commit()
+            db.refresh(setting)
     return UserSettingOut.model_validate(setting)
 
 
@@ -42,7 +59,7 @@ def update_settings(
         db.add(setting)
 
     if payload.profile_json is not None:
-        setting.profile_json = payload.profile_json
+        setting.profile_json = {**(setting.profile_json or {}), **payload.profile_json}
         if "full_name" in payload.profile_json and payload.profile_json["full_name"]:
             current_user.full_name = payload.profile_json["full_name"]
         if "email" in payload.profile_json and payload.profile_json["email"]:
@@ -50,9 +67,9 @@ def update_settings(
         if "phone" in payload.profile_json:
             current_user.phone = payload.profile_json["phone"]
     if payload.notification_prefs is not None:
-        setting.notification_prefs = payload.notification_prefs
+        setting.notification_prefs = {**(setting.notification_prefs or {}), **payload.notification_prefs}
     if payload.alert_thresholds is not None:
-        setting.alert_thresholds = payload.alert_thresholds
+        setting.alert_thresholds = {**(setting.alert_thresholds or {}), **payload.alert_thresholds}
 
     db.commit()
     db.refresh(setting)

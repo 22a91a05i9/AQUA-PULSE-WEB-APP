@@ -13,28 +13,16 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 def agent_site_scope(current_user: User, db: Session) -> tuple[list[Site], list[int]]:
-    assignments = db.scalars(
-        select(SiteAgentAssignment).where(
-            SiteAgentAssignment.agent_user_id == current_user.id,
-            SiteAgentAssignment.is_active.is_(True),
-        )
-    ).all()
-    site_ids = {assignment.site_id for assignment in assignments}
-
-    if current_user.owner_user_id:
-        owner_device_site_ids = db.scalars(
-            select(Device.site_id).where(
-                Device.owner_user_id == current_user.owner_user_id,
-                Device.site_id.is_not(None),
+    site_ids = set(
+        db.scalars(
+            select(SiteAgentAssignment.site_id).where(
+                SiteAgentAssignment.agent_user_id == current_user.id,
+                SiteAgentAssignment.is_active.is_(True),
             )
         ).all()
-        site_ids.update(site_id for site_id in owner_device_site_ids if site_id)
-
-        owner_site_ids = db.scalars(select(Site.id).where(Site.owner_user_id == current_user.owner_user_id)).all()
-        site_ids.update(owner_site_ids)
-
+    )
     site_id_list = sorted(site_ids)
-    sites = db.scalars(select(Site).where(Site.id.in_(site_id_list)).order_by(Site.created_at.desc())).all() if site_id_list else []
+    sites = db.scalars(select(Site).where(Site.id.in_(site_id_list)).order_by(Site.id.asc())).all() if site_id_list else []
     return sites, site_id_list
 
 
@@ -44,30 +32,20 @@ def agent_overview(
     db: Session = Depends(get_db),
 ):
     sites, site_id_list = agent_site_scope(current_user, db)
-    device_filters = []
-    if site_id_list:
-        device_filters.append(Device.site_id.in_(site_id_list))
-    if current_user.owner_user_id:
-        device_filters.append(Device.owner_user_id == current_user.owner_user_id)
     devices = db.scalars(
         select(Device)
-        .where(or_(*device_filters))
+        .where(Device.site_id.in_(site_id_list))
         .order_by(Device.created_at.desc())
-    ).all() if device_filters else []
+    ).all() if site_id_list else []
     alerts = db.scalars(
         select(Alert).where(Alert.recipient_user_id == current_user.id).order_by(Alert.created_at.desc())
     ).all()
-    reading_filters = []
-    if site_id_list:
-        reading_filters.extend([Reading.site_id.in_(site_id_list), Device.site_id.in_(site_id_list)])
-    if current_user.owner_user_id:
-        reading_filters.append(Device.owner_user_id == current_user.owner_user_id)
     readings = db.scalars(
         select(Reading)
         .join(Device, Reading.device_id == Device.id)
-        .where(or_(*reading_filters))
+        .where(or_(Reading.site_id.in_(site_id_list), Device.site_id.in_(site_id_list)))
         .order_by(Reading.collected_at.desc())
-    ).all() if reading_filters else []
+    ).all() if site_id_list else []
 
     return {
         "agent": UserOut.model_validate(current_user),
@@ -156,23 +134,16 @@ def agent_sos_context(
     db: Session = Depends(get_db),
 ):
     sites, site_id_list = agent_site_scope(current_user, db)
-    device_filters = []
-    if site_id_list:
-        device_filters.append(Device.site_id.in_(site_id_list))
-    if current_user.owner_user_id:
-        device_filters.append(Device.owner_user_id == current_user.owner_user_id)
 
     devices = db.scalars(
         select(Device)
-        .where(or_(*device_filters))
+        .where(Device.site_id.in_(site_id_list))
         .order_by(Device.created_at.desc())
-    ).all() if device_filters else []
+    ).all() if site_id_list else []
 
     alert_filters = [Alert.recipient_user_id == current_user.id]
     if site_id_list:
         alert_filters.append(Alert.site_id.in_(site_id_list))
-    if current_user.owner_user_id:
-        alert_filters.append(Alert.owner_user_id == current_user.owner_user_id)
     alerts = db.scalars(
         select(Alert)
         .where(or_(*alert_filters))
@@ -180,18 +151,13 @@ def agent_sos_context(
         .limit(100)
     ).unique().all()
 
-    reading_filters = []
-    if site_id_list:
-        reading_filters.extend([Reading.site_id.in_(site_id_list), Device.site_id.in_(site_id_list)])
-    if current_user.owner_user_id:
-        reading_filters.append(Device.owner_user_id == current_user.owner_user_id)
     readings = db.scalars(
         select(Reading)
         .join(Device, Reading.device_id == Device.id)
-        .where(or_(*reading_filters))
+        .where(or_(Reading.site_id.in_(site_id_list), Device.site_id.in_(site_id_list)))
         .order_by(Reading.collected_at.desc())
         .limit(20)
-    ).all() if reading_filters else []
+    ).all() if site_id_list else []
 
     return {
         "agent": UserOut.model_validate(current_user),

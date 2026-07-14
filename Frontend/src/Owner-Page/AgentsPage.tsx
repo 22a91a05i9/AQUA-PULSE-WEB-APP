@@ -3,6 +3,7 @@ import { Clock, Filter, MoreHorizontal, Plus, Search, UserRound, Users } from 'l
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { RowActionMenu } from '../lib/tableActions';
+import { DialogButton, DialogField, ProjectDialog } from '../lib/projectDialog';
 
 interface Agent {
   id: string;
@@ -37,11 +38,12 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All Status');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+  const [agentToEdit, setAgentToEdit] = useState<Agent | null>(null);
+  const [editName, setEditName] = useState('');
 
   const handleDeleteAgent = async (agent: Agent) => {
-    if (!window.confirm(`Are you sure you want to delete agent "${agent.name}"?`)) {
-      return;
-    }
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -50,16 +52,15 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
         token: session.token,
       });
       setAgentsList((prev) => prev.filter((a) => a.id !== agent.id));
-      alert(`Agent "${agent.name}" deleted successfully.`);
+      setNotice(`Agent "${agent.name}" deleted successfully.`);
+      setAgentToDelete(null);
     } catch (err: any) {
       console.error('Failed to delete agent:', err);
-      alert(err?.detail || err?.message || 'Failed to delete agent.');
+      setNotice(err?.detail || err?.message || 'Failed to delete agent.');
     }
   };
 
   const handleEditAgent = async (agent: Agent) => {
-    const newName = window.prompt(`Edit name for agent:`, agent.name);
-    if (newName === null) return;
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -67,16 +68,17 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
         method: 'PUT',
         token: session.token,
         body: {
-          full_name: newName.trim(),
+          full_name: editName.trim(),
         },
       });
       setAgentsList((prev) =>
         prev.map((a) => (a.id === agent.id ? { ...a, name: updated.full_name } : a))
       );
-      alert(`Agent profile updated successfully.`);
+      setNotice('Agent profile updated successfully.');
+      setAgentToEdit(null);
     } catch (err: any) {
       console.error('Failed to update agent:', err);
-      alert(err?.detail || err?.message || 'Failed to update agent.');
+      setNotice(err?.detail || err?.message || 'Failed to update agent.');
     }
   };
 
@@ -153,6 +155,7 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
 
   return (
     <div className="space-y-5 animate-fade-in text-left">
+      {notice && <p className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">{notice}</p>}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <section className="metric-card glass rounded-xl p-6">
           <div className="metric-card-row">
@@ -238,7 +241,13 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
               <span className="text-[10px] text-slate-300">Score</span>
             </div>
             <p className="text-sm text-slate-300">ID: AG-{agent.id}</p>
-            <RowActionMenu onEdit={() => handleEditAgent(agent)} onDelete={() => handleDeleteAgent(agent)} />
+            <RowActionMenu
+              onEdit={() => {
+                setAgentToEdit(agent);
+                setEditName(agent.name);
+              }}
+              onDelete={() => setAgentToDelete(agent)}
+            />
           </section>
         ))}
       </div>
@@ -253,6 +262,34 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
           Add New Agent
         </button>
       </div>
+      {agentToEdit && (
+        <ProjectDialog
+          title="Edit Agent"
+          description="Update the agent profile shown across owner management screens."
+          onClose={() => setAgentToEdit(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setAgentToEdit(null)}>Cancel</DialogButton>
+              <DialogButton tone="primary" disabled={!editName.trim()} onClick={() => handleEditAgent(agentToEdit)}>Save Changes</DialogButton>
+            </>
+          }
+        >
+          <DialogField label="Agent Name" value={editName} onChange={setEditName} />
+        </ProjectDialog>
+      )}
+      {agentToDelete && (
+        <ProjectDialog
+          title="Delete Agent?"
+          description={`This will remove "${agentToDelete.name}" and clear their active assignments.`}
+          onClose={() => setAgentToDelete(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setAgentToDelete(null)}>Cancel</DialogButton>
+              <DialogButton tone="danger" onClick={() => handleDeleteAgent(agentToDelete)}>Delete Agent</DialogButton>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

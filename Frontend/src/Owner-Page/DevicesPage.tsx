@@ -18,6 +18,7 @@ import {
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { RowActionMenu, exportRowsToCsv } from '../lib/tableActions';
+import { DialogButton, DialogSelect, ProjectDialog } from '../lib/projectDialog';
 
 type DeviceStatus = 'Online' | 'Warning' | 'Offline';
 
@@ -97,6 +98,10 @@ export default function DevicesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null);
+  const [deviceToEdit, setDeviceToEdit] = useState<Device | null>(null);
+  const [editStatus, setEditStatus] = useState('active');
 
   useEffect(() => {
     async function fetchDevices() {
@@ -152,9 +157,6 @@ export default function DevicesPage() {
   }, []);
 
   const handleDeleteDevice = async (device: Device) => {
-    if (!window.confirm(`Are you sure you want to delete and unassign device "${device.id}"?`)) {
-      return;
-    }
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -163,16 +165,15 @@ export default function DevicesPage() {
         token: session.token,
       });
       setDeviceList((prev) => prev.filter((d) => d.dbId !== device.dbId));
-      alert(`Device "${device.id}" unassigned and deleted successfully.`);
+      setNotice(`Device "${device.id}" unassigned successfully.`);
+      setDeviceToDelete(null);
     } catch (err: any) {
       console.error('Failed to delete device:', err);
-      alert(err?.detail || err?.message || 'Failed to delete device.');
+      setNotice(err?.detail || err?.message || 'Failed to delete device.');
     }
   };
 
   const handleEditDevice = async (device: Device) => {
-    const newStatus = window.prompt(`Edit device status (active/inactive):`, device.status === 'Online' ? 'active' : 'inactive');
-    if (newStatus === null) return;
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -180,7 +181,7 @@ export default function DevicesPage() {
         method: 'PUT',
         token: session.token,
         body: {
-          status: newStatus.trim().toLowerCase(),
+          status: editStatus,
         },
       });
       setDeviceList((prev) =>
@@ -190,10 +191,11 @@ export default function DevicesPage() {
             : d
         )
       );
-      alert(`Device status updated successfully.`);
+      setNotice('Device status updated successfully.');
+      setDeviceToEdit(null);
     } catch (err: any) {
       console.error('Failed to update device:', err);
-      alert(err?.detail || err?.message || 'Failed to update device.');
+      setNotice(err?.detail || err?.message || 'Failed to update device.');
     }
   };
 
@@ -228,6 +230,7 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {notice && <p className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">{notice}</p>}
       <div className="auto-card-grid gap-4">
         <StatCard icon={Cpu} label="Total Devices" value={String(deviceList.length)} tone="cyan" desc="From database" />
         <StatCard icon={Wifi} label="Online" value={String(onlineCount)} tone="green" desc="Active status" />
@@ -348,7 +351,13 @@ export default function DevicesPage() {
                     <p className="mt-1 text-slate-300">{device.batteryLabel}</p>
                   </td>
                   <td className="pr-5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <RowActionMenu onEdit={() => handleEditDevice(device)} onDelete={() => handleDeleteDevice(device)} />
+                    <RowActionMenu
+                      onEdit={() => {
+                        setDeviceToEdit(device);
+                        setEditStatus(device.status === 'Online' ? 'active' : 'inactive');
+                      }}
+                      onDelete={() => setDeviceToDelete(device)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -356,6 +365,42 @@ export default function DevicesPage() {
           </table>
         </div>
       </section>
+      {deviceToEdit && (
+        <ProjectDialog
+          title="Edit Device Status"
+          description={`Update status for device "${deviceToEdit.id}".`}
+          onClose={() => setDeviceToEdit(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setDeviceToEdit(null)}>Cancel</DialogButton>
+              <DialogButton tone="primary" onClick={() => handleEditDevice(deviceToEdit)}>Save Changes</DialogButton>
+            </>
+          }
+        >
+          <DialogSelect
+            label="Device Status"
+            value={editStatus}
+            onChange={setEditStatus}
+            options={[
+              { value: 'active', label: 'Active / Online' },
+              { value: 'inactive', label: 'Inactive / Offline' },
+            ]}
+          />
+        </ProjectDialog>
+      )}
+      {deviceToDelete && (
+        <ProjectDialog
+          title="Unassign Device?"
+          description={`This will remove owner and site assignment for device "${deviceToDelete.id}". Historical readings are preserved.`}
+          onClose={() => setDeviceToDelete(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setDeviceToDelete(null)}>Cancel</DialogButton>
+              <DialogButton tone="danger" onClick={() => handleDeleteDevice(deviceToDelete)}>Unassign Device</DialogButton>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

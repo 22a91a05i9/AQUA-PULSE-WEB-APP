@@ -22,6 +22,7 @@ import { changePassword as changeAccountPassword, getAuthSession, updateStoredAu
 import { useTheme, useTranslation } from '../lib/i18n';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { RowActionMenu } from '../lib/tableActions';
+import { DialogButton, DialogField, ProjectDialog } from '../lib/projectDialog';
 
 type SettingsPanel = 'profile' | 'units' | 'timezone' | 'password' | null;
 
@@ -49,6 +50,9 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
   const [selectedTimeZone, setSelectedTimeZone] = useState(detectedTimeZone);
   const { theme, changeTheme } = useTheme();
   const { t, lang, changeLanguage } = useTranslation();
+  const [agentToDelete, setAgentToDelete] = useState<any | null>(null);
+  const [agentToEdit, setAgentToEdit] = useState<any | null>(null);
+  const [editAgentForm, setEditAgentForm] = useState({ name: '', phone: '' });
 
   useEffect(() => {
     async function loadSettingsData() {
@@ -79,9 +83,6 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
   }, []);
 
   const handleDeleteAgent = async (agent: any) => {
-    if (!window.confirm(`Are you sure you want to delete agent "${agent.full_name || agent.name}"?`)) {
-      return;
-    }
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -91,18 +92,14 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
       });
       setAgentsList((prev) => prev.filter((a) => a.id !== agent.id));
       setMessage(`Agent "${agent.full_name || agent.name}" deleted successfully.`);
+      setAgentToDelete(null);
     } catch (err: any) {
       console.error('Failed to delete agent:', err);
-      alert(err?.detail || err?.message || 'Failed to delete agent.');
+      setMessage(err?.detail || err?.message || 'Failed to delete agent.');
     }
   };
 
   const handleEditAgent = async (agent: any) => {
-    const newName = window.prompt('Edit name for agent:', agent.full_name || agent.name);
-    if (newName === null) return;
-    const newPhone = window.prompt('Edit phone for agent:', agent.phone || '');
-    if (newPhone === null) return;
-
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -110,15 +107,16 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
         method: 'PUT',
         token: session.token,
         body: {
-          full_name: newName.trim(),
-          phone: newPhone.trim(),
+          full_name: editAgentForm.name.trim(),
+          phone: editAgentForm.phone.trim(),
         },
       });
       setAgentsList((prev) => prev.map((a) => (a.id === agent.id ? updated : a)));
       setMessage('Agent profile updated successfully.');
+      setAgentToEdit(null);
     } catch (err: any) {
       console.error('Failed to update agent:', err);
-      alert(err?.detail || err?.message || 'Failed to update agent.');
+      setMessage(err?.detail || err?.message || 'Failed to update agent.');
     }
   };
 
@@ -191,9 +189,9 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
     }
   };
 
-  const ownerName = ownerData?.full_name || ownerData?.name || 'Owner User';
-  const ownerEmail = ownerData?.email || '';
-  const ownerPhone = ownerData?.phone || 'No phone registered';
+  const ownerName = profileForm.full_name || ownerData?.full_name || ownerData?.name || 'Owner User';
+  const ownerEmail = profileForm.email || ownerData?.email || '';
+  const ownerPhone = profileForm.phone || ownerData?.phone || ownerData?.profile_json?.phone || 'No phone registered';
   const ownerRole = ownerData?.role ? ownerData.role.charAt(0).toUpperCase() + ownerData.role.slice(1) : 'Owner';
   const visibleAgents = showAllAgents ? agentsList : agentsList.slice(0, 2);
   const timeZoneOptions = [
@@ -295,7 +293,13 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
               <p className="flex items-center gap-2 text-sm text-slate-300"><Mail className="h-4 w-4" /> {member.email}</p>
               <p className="flex items-center gap-2 text-sm text-slate-300"><Phone className="h-4 w-4" /> {member.phone || 'No phone'}</p>
               <span className="rounded-md bg-cyan-500/15 px-2 py-1 text-center text-xs font-bold text-cyan-300">Agent</span>
-              <RowActionMenu onEdit={() => handleEditAgent(member)} onDelete={() => handleDeleteAgent(member)} />
+              <RowActionMenu
+                onEdit={() => {
+                  setAgentToEdit(member);
+                  setEditAgentForm({ name: member.full_name || member.name || '', phone: member.phone || '' });
+                }}
+                onDelete={() => setAgentToDelete(member)}
+              />
             </div>
           ))}
           {agentsList.length === 0 && (
@@ -415,6 +419,35 @@ export default function SettingsPage({ onAddAgent }: { onAddAgent: () => void })
       </section>
 
       {message && <p className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{message}</p>}
+      {agentToEdit && (
+        <ProjectDialog
+          title="Edit Agent"
+          description="Update this agent's owner-managed profile details."
+          onClose={() => setAgentToEdit(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setAgentToEdit(null)}>Cancel</DialogButton>
+              <DialogButton tone="primary" disabled={!editAgentForm.name.trim()} onClick={() => handleEditAgent(agentToEdit)}>Save Changes</DialogButton>
+            </>
+          }
+        >
+          <DialogField label="Agent Name" value={editAgentForm.name} onChange={(value) => setEditAgentForm((current) => ({ ...current, name: value }))} />
+          <DialogField label="Phone Number" value={editAgentForm.phone} onChange={(value) => setEditAgentForm((current) => ({ ...current, phone: value }))} />
+        </ProjectDialog>
+      )}
+      {agentToDelete && (
+        <ProjectDialog
+          title="Delete Agent?"
+          description={`This will remove "${agentToDelete.full_name || agentToDelete.name}" and clear their active assignments.`}
+          onClose={() => setAgentToDelete(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setAgentToDelete(null)}>Cancel</DialogButton>
+              <DialogButton tone="danger" onClick={() => handleDeleteAgent(agentToDelete)}>Delete Agent</DialogButton>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

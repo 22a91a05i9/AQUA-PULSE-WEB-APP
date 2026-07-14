@@ -24,6 +24,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { RowActionMenu } from '../lib/tableActions';
+import { DialogButton, DialogField, ProjectDialog } from '../lib/projectDialog';
 
 type Site = {
   id: string;
@@ -180,12 +181,13 @@ export default function SitesPage() {
   const [alertsList, setAlertsList] = useState<any[]>([]);
   const [readingsList, setReadingsList] = useState<any[]>([]);
   const [assignmentsList, setAssignmentsList] = useState<any[]>([]);
+  const [notice, setNotice] = useState('');
+  const [siteToDelete, setSiteToDelete] = useState<Site | null>(null);
+  const [siteToEdit, setSiteToEdit] = useState<Site | null>(null);
+  const [editSiteForm, setEditSiteForm] = useState({ name: '', location: '' });
 
   const handleDeleteSite = async (site: Site) => {
     const id = site.id.replace('SITE-', '');
-    if (!window.confirm(`Are you sure you want to delete site "${site.name}"?`)) {
-      return;
-    }
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -194,20 +196,16 @@ export default function SitesPage() {
         token: session.token,
       });
       setSitesList((prev) => prev.filter((s) => s.id !== site.id));
-      alert(`Site "${site.name}" deleted successfully.`);
+      setNotice(`Site "${site.name}" deleted successfully.`);
+      setSiteToDelete(null);
     } catch (err: any) {
       console.error('Failed to delete site:', err);
-      alert(err?.detail || err?.message || 'Failed to delete site.');
+      setNotice(err?.detail || err?.message || 'Failed to delete site.');
     }
   };
 
   const handleEditSite = async (site: Site) => {
     const id = site.id.replace('SITE-', '');
-    const newName = window.prompt(`Edit site name:`, site.name);
-    if (newName === null) return;
-    const newLocation = window.prompt(`Edit site location:`, site.location);
-    if (newLocation === null) return;
-
     try {
       const session = getAuthSession();
       if (!session) return;
@@ -215,8 +213,8 @@ export default function SitesPage() {
         method: 'PUT',
         token: session.token,
         body: {
-          name: newName.trim(),
-          location_text: newLocation.trim(),
+          name: editSiteForm.name.trim(),
+          location_text: editSiteForm.location.trim(),
         },
       });
       setSitesList((prev) =>
@@ -226,10 +224,11 @@ export default function SitesPage() {
             : s
         )
       );
-      alert(`Site "${site.name}" updated successfully.`);
+      setNotice(`Site "${site.name}" updated successfully.`);
+      setSiteToEdit(null);
     } catch (err: any) {
       console.error('Failed to update site:', err);
-      alert(err?.detail || err?.message || 'Failed to update site.');
+      setNotice(err?.detail || err?.message || 'Failed to update site.');
     }
   };
 
@@ -336,7 +335,9 @@ export default function SitesPage() {
         const matchesRegion = regionFilter === 'all' || site.location.toLowerCase().includes(regionFilter.toLowerCase());
         return matchesSearch && matchesStatus && matchesRegion;
       }).sort((a, b) => {
-        return sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+        const aId = Number(a.id.replace('SITE-', ''));
+        const bId = Number(b.id.replace('SITE-', ''));
+        return sortOrder === 'asc' ? aId - bId : bId - aId;
       }),
     [search, sitesList, statusFilter, regionFilter, sortOrder],
   );
@@ -353,7 +354,7 @@ export default function SitesPage() {
     e.preventDefault();
     if (creatingSite) return;
     if (sitesList.some((site) => site.name.trim().toLowerCase() === name.trim().toLowerCase() && site.location.trim().toLowerCase() === location.trim().toLowerCase())) {
-      alert('Site already created.');
+      setNotice('Site already created.');
       return;
     }
     setCreatingSite(true);
@@ -381,7 +382,7 @@ export default function SitesPage() {
       setArea('4.0 acres');
       loadData();
     } catch (err: any) {
-      alert('Error creating site: ' + (err.message || String(err)));
+      setNotice(`Error creating site: ${err.message || String(err)}`);
     } finally {
       setCreatingSite(false);
     }
@@ -391,6 +392,7 @@ export default function SitesPage() {
   try {
     return (
       <div className="animate-fade-in space-y-4 text-slate-300 text-left">
+        {notice && <p className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">{notice}</p>}
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
           <SiteStat icon={MapPin} label="Total Sites" value={String(sitesList.length)} desc="Synchronized with database" tone="text-sky-400 bg-sky-500/15" />
           <SiteStat icon={CheckCircle2} label="Active Sites" value={String(sitesList.filter(s => s.status === 'Healthy').length)} desc="All systems ok" tone="text-emerald-400 bg-emerald-500/15" />
@@ -475,7 +477,13 @@ export default function SitesPage() {
               <ScoreCircle score={site.score} label={site.water} />
               <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setSelectedSite(site)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0d3660] text-white hover:border-cyan-400"><Eye className="h-5 w-5" /></button>
-                <RowActionMenu onEdit={() => handleEditSite(site)} onDelete={() => handleDeleteSite(site)} />
+                <RowActionMenu
+                  onEdit={() => {
+                    setSiteToEdit(site);
+                    setEditSiteForm({ name: site.name, location: site.location });
+                  }}
+                  onDelete={() => setSiteToDelete(site)}
+                />
               </div>
             </section>
           ))}
@@ -518,6 +526,37 @@ export default function SitesPage() {
               </div>
             </form>
           </div>
+        )}
+
+        {siteToEdit && (
+          <ProjectDialog
+            title="Edit Site"
+            description="Update the site name and location shown to owners and assigned agents."
+            onClose={() => setSiteToEdit(null)}
+            footer={
+              <>
+                <DialogButton onClick={() => setSiteToEdit(null)}>Cancel</DialogButton>
+                <DialogButton tone="primary" disabled={!editSiteForm.name.trim()} onClick={() => handleEditSite(siteToEdit)}>Save Changes</DialogButton>
+              </>
+            }
+          >
+            <DialogField label="Site Name" value={editSiteForm.name} onChange={(value) => setEditSiteForm((current) => ({ ...current, name: value }))} />
+            <DialogField label="Location" value={editSiteForm.location} onChange={(value) => setEditSiteForm((current) => ({ ...current, location: value }))} />
+          </ProjectDialog>
+        )}
+
+        {siteToDelete && (
+          <ProjectDialog
+            title="Delete Site?"
+            description={`This will delete "${siteToDelete.name}" and remove its active device and agent site assignments.`}
+            onClose={() => setSiteToDelete(null)}
+            footer={
+              <>
+                <DialogButton onClick={() => setSiteToDelete(null)}>Cancel</DialogButton>
+                <DialogButton tone="danger" onClick={() => handleDeleteSite(siteToDelete)}>Delete Site</DialogButton>
+              </>
+            }
+          />
         )}
 
         {selectedSite && (
@@ -590,7 +629,13 @@ export default function SitesPage() {
               <ScoreCircle score={site.score} label={site.water} />
               <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setSelectedSite(site)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0d3660] text-white hover:border-cyan-400"><Eye className="h-5 w-5" /></button>
-                <RowActionMenu onEdit={() => handleEditSite(site)} onDelete={() => handleDeleteSite(site)} />
+                <RowActionMenu
+                  onEdit={() => {
+                    setSiteToEdit(site);
+                    setEditSiteForm({ name: site.name, location: site.location });
+                  }}
+                  onDelete={() => setSiteToDelete(site)}
+                />
               </div>
             </section>
           ))}

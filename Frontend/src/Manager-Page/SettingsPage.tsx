@@ -4,6 +4,7 @@ import { Bell, ChevronDown, Database, LockKeyhole, RefreshCw, Save, Shield, Tras
 import { PageTitle, Panel, ToneIcon } from './components';
 import { apiRequest } from '../lib/api';
 import { changePassword as changeAccountPassword, getAuthSession, updateStoredAuthUser } from '../lib/auth';
+import { useTheme, useTranslation } from '../lib/i18n';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 
 const logRows = [
@@ -11,6 +12,9 @@ const logRows = [
   { user: 'Manager', action: 'Updated owner contact validation', time: 'Today, 09:45 AM' },
   { user: 'System', action: 'Generated storage snapshot', time: 'Yesterday, 06:10 PM' },
 ];
+
+const languageLabels: Record<string, string> = { en: 'English', hi: 'Hindi', te: 'Telugu' };
+const languageCodes: Record<string, string> = { English: 'en', Hindi: 'hi', Telugu: 'te' };
 
 export default function SettingsPage() {
   const session = getAuthSession();
@@ -31,6 +35,10 @@ export default function SettingsPage() {
   const [roles, setRoles] = useState({ ownerEdit: true, deviceAssign: true, reportExport: true });
   const [logFilter, setLogFilter] = useState('');
   const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState<'success' | 'error'>('success');
+  const [settingsData, setSettingsData] = useState<any>(null);
+  const { theme, changeTheme } = useTheme();
+  const { changeLanguage } = useTranslation();
 
   const filteredLogs = useMemo(
     () => logRows.filter((row) => [row.user, row.action, row.time].join(' ').toLowerCase().includes(logFilter.toLowerCase())),
@@ -47,11 +55,23 @@ export default function SettingsPage() {
           token: session.token,
         });
         const profileJson = settings.profile_json || {};
+        const notificationPrefs = settings.notification_prefs || {};
+        setSettingsData(settings);
         setProfile({
           name: profileJson.full_name || session.user.name || 'Default Manager',
           email: profileJson.email || session.user.email || 'manager@gmail.com',
-          phone: profileJson.phone || '',
+          phone: profileJson.phone || (session.user as any).phone || '',
           avatar: profileJson.avatar || profileJson.avatarUrl || session.user.avatarUrl || '',
+        });
+        setNotifications({
+          alerts: notificationPrefs.alerts ?? notificationPrefs.push_alerts ?? true,
+          reports: notificationPrefs.reports ?? notificationPrefs.weekly_report ?? true,
+          deviceOffline: notificationPrefs.device_offline ?? true,
+        });
+        setPreferences({
+          theme: profileJson.theme || localStorage.getItem('app-theme') || theme || 'Dark',
+          language: languageLabels[notificationPrefs.language || profileJson.language || 'en'] || 'English',
+          refresh: profileJson.refresh_interval || notificationPrefs.refresh_interval || '30 sec',
         });
       } catch (err) {
         console.error('Failed to load manager settings:', err);
@@ -64,6 +84,7 @@ export default function SettingsPage() {
   const toggleSection = (section: string) => {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
     setMessage('');
+    setMessageTone('success');
   };
 
   const handleProfileImage = (file: File | null) => {
@@ -77,6 +98,7 @@ export default function SettingsPage() {
 
   const saveProfile = async () => {
     if (!profile.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(profile.email) || (profile.phone && !/^\d{10}$/.test(profile.phone))) {
+      setMessageTone('error');
       setMessage('Enter name, a valid email, and a 10-digit phone number if phone is provided.');
       return;
     }
@@ -88,45 +110,100 @@ export default function SettingsPage() {
         token: session.token,
         body: {
           profile_json: {
+            ...(settingsData?.profile_json || {}),
             full_name: profile.name.trim(),
             email: profile.email.trim(),
             phone: profile.phone.trim() || null,
             avatar: profile.avatar,
             role: session.user.role,
+            theme: preferences.theme,
+            refresh_interval: preferences.refresh,
           },
         },
       });
       const updatedProfile = updated.profile_json || {};
+      setSettingsData(updated);
       updateStoredAuthUser({
         name: updatedProfile.full_name || profile.name,
         email: updatedProfile.email || profile.email,
         avatarUrl: updatedProfile.avatar || undefined,
       });
+      setMessageTone('success');
       setMessage('Profile settings saved successfully.');
     } catch (err) {
       console.error('Failed to save manager profile:', err);
+      setMessageTone('error');
       setMessage(err instanceof Error ? err.message : 'Failed to save profile settings.');
+    }
+  };
+
+  const saveSystemSettings = async () => {
+    try {
+      const session = getAuthSession();
+      if (!session) return;
+      const language = languageCodes[preferences.language] || 'en';
+      const updated = await apiRequest<any>('/settings', {
+        method: 'PUT',
+        token: session.token,
+        body: {
+          profile_json: {
+            ...(settingsData?.profile_json || {}),
+            full_name: profile.name.trim(),
+            email: profile.email.trim(),
+            phone: profile.phone.trim() || null,
+            avatar: profile.avatar,
+            role: session.user.role,
+            theme: preferences.theme,
+            language,
+            refresh_interval: preferences.refresh,
+          },
+          notification_prefs: {
+            ...(settingsData?.notification_prefs || {}),
+            alerts: notifications.alerts,
+            reports: notifications.reports,
+            device_offline: notifications.deviceOffline,
+            push_alerts: notifications.alerts,
+            weekly_report: notifications.reports,
+            language,
+            refresh_interval: preferences.refresh,
+          },
+        },
+      });
+      setSettingsData(updated);
+      changeTheme(preferences.theme);
+      changeLanguage(language);
+      setMessageTone('success');
+      setMessage(`System settings saved. Auto-refresh preference is now ${preferences.refresh}.`);
+    } catch (err) {
+      console.error('Failed to save system settings:', err);
+      setMessageTone('error');
+      setMessage(err instanceof Error ? err.message : 'Failed to save system settings.');
     }
   };
 
   const changePassword = async () => {
     if (!passwords.current || !passwords.next || !passwords.confirm) {
+      setMessageTone('error');
       setMessage('Please fill current password, new password, and confirm password.');
       return;
     }
     if (!isAllowedPassword(passwords.next)) {
+      setMessageTone('error');
       setMessage(PASSWORD_POLICY_MESSAGE);
       return;
     }
     if (passwords.next !== passwords.confirm) {
+      setMessageTone('error');
       setMessage('New password and confirm password do not match.');
       return;
     }
     try {
       const response = await changeAccountPassword(passwords.current, passwords.next);
       setPasswords({ current: '', next: '', confirm: '' });
+      setMessageTone('success');
       setMessage(response.message);
     } catch (error) {
+      setMessageTone('error');
       setMessage(error instanceof Error ? error.message : 'Failed to change password.');
     }
   };
@@ -169,7 +246,7 @@ export default function SettingsPage() {
       />
 
       {message && (
-        <div className={`mb-5 rounded-lg border p-4 text-sm font-semibold ${message.includes('success') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
+        <div className={`mb-5 rounded-lg border p-4 text-sm font-semibold ${messageTone === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
           {message}
         </div>
       )}
@@ -236,6 +313,7 @@ export default function SettingsPage() {
             </div>
             <div className="rounded-lg border border-[#0d3660] bg-[#031426]/50 p-5">
               <h3 className="mb-4 font-bold text-white">System Preferences</h3>
+              <p className="mb-3 text-xs leading-5 text-slate-400">Refresh time controls how often manager dashboards should refresh live data.</p>
               <select value={preferences.theme} onChange={(event) => setPreferences({ ...preferences, theme: event.target.value })} className="mb-3 h-11 w-full rounded-md border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"><option>Dark</option><option>Light</option></select>
               <select value={preferences.language} onChange={(event) => setPreferences({ ...preferences, language: event.target.value })} className="mb-3 h-11 w-full rounded-md border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"><option>English</option><option>Hindi</option><option>Telugu</option></select>
               <select value={preferences.refresh} onChange={(event) => setPreferences({ ...preferences, refresh: event.target.value })} className="h-11 w-full rounded-md border border-[#0d3660] bg-[#020b18] px-3 text-sm text-white"><option>10 sec</option><option>30 sec</option><option>1 min</option></select>
@@ -244,10 +322,10 @@ export default function SettingsPage() {
               <h3 className="mb-4 font-bold text-white">Data & Storage</h3>
               <p className="text-3xl font-extrabold text-white">68%</p>
               <p className="mt-2 text-sm text-slate-300">Database storage used</p>
-              <button onClick={() => setMessage('Storage details refreshed successfully.')} className="mt-5 flex h-10 items-center gap-2 rounded-md border border-[#0d3660] px-4 text-sm font-bold text-white"><RefreshCw className="h-4 w-4" /> Refresh Details</button>
+              <button onClick={() => { setMessageTone('success'); setMessage('Storage details refreshed successfully.'); }} className="mt-5 flex h-10 items-center gap-2 rounded-md border border-[#0d3660] px-4 text-sm font-bold text-white"><RefreshCw className="h-4 w-4" /> Refresh Details</button>
             </div>
           </div>
-          <button onClick={() => setMessage('System preferences saved successfully.')} className="mt-5 h-11 rounded-md bg-emerald-600 px-5 text-sm font-bold text-white">Save System Settings</button>
+          <button onClick={saveSystemSettings} className="mt-5 h-11 rounded-md bg-emerald-600 px-5 text-sm font-bold text-white">Save System Settings</button>
         </Section>
 
         <Section id="security" title="Security Settings" icon={Shield} tone="red">
@@ -260,7 +338,7 @@ export default function SettingsPage() {
                   <input type="checkbox" checked={value} onChange={(event) => setRoles({ ...roles, [key as keyof typeof roles]: event.target.checked })} className="h-5 w-5 accent-cyan-400" />
                 </label>
               ))}
-              <button onClick={() => setMessage('Access permissions saved successfully.')} className="mt-3 h-10 rounded-md border border-[#0d3660] px-4 text-sm font-bold text-white">Save Permissions</button>
+              <button onClick={() => { setMessageTone('success'); setMessage('Access permissions saved successfully.'); }} className="mt-3 h-10 rounded-md border border-[#0d3660] px-4 text-sm font-bold text-white">Save Permissions</button>
             </div>
             <div className="rounded-lg border border-[#0d3660] bg-[#031426]/50 p-5">
               <h3 className="mb-4 font-bold text-white">Activity Logs</h3>

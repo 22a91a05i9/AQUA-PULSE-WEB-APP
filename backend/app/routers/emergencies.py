@@ -146,8 +146,7 @@ def create_emergency(
                     SiteAgentAssignment.is_active.is_(True),
                 )
             )
-            owner_site_access = bool(current_user.owner_user_id and site.owner_user_id == current_user.owner_user_id)
-            if not assignment and not owner_site_access:
+            if not assignment:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only trigger SOS for assigned sites.")
         elif current_user.role == "owner" and site.owner_user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only trigger SOS for your own sites.")
