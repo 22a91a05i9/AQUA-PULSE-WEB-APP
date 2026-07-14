@@ -59,22 +59,6 @@ const parameterInsights = [
   { label: 'Turbidity (NTU)', value: '24', unit: 'NTU', status: 'Normal', color: '#22c55e', sparkline: [22, 23, 25, 24, 26, 24, 24] },
 ];
 
-const incidentTrend = [
-  { date: 'May 13', critical: 3, warning: 5, resolved: 8 },
-  { date: 'May 14', critical: 2, warning: 4, resolved: 9 },
-  { date: 'May 15', critical: 4, warning: 6, resolved: 7 },
-  { date: 'May 16', critical: 3, warning: 5, resolved: 8 },
-  { date: 'May 18', critical: 2, warning: 4, resolved: 10 },
-];
-
-const topAlerts = [
-  { label: 'Low Dissolved Oxygen', count: 12, icon: Wind, color: '#ef4444' },
-  { label: 'pH Level High', count: 8, icon: Droplet, color: '#f59e0b' },
-  { label: 'Temperature Spike', count: 6, icon: Thermometer, color: '#ef4444' },
-  { label: 'Device Offline', count: 5, icon: AlertTriangle, color: '#f59e0b' },
-  { label: 'Water Level Deviation High', count: 4, icon: Droplet, color: '#3b82f6' },
-];
-
 type TooltipEntry = {
   color?: string;
   name?: string;
@@ -494,7 +478,7 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
           </div>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={alertDays.length > 0 ? alertDays : incidentTrend} barGap={2}>
+              <BarChart data={alertDays} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#0d3660" vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -505,6 +489,11 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
               </BarChart>
             </ResponsiveContainer>
           </div>
+          {alertDays.length === 0 && (
+            <p className="mt-3 rounded-lg border border-[#0d3660]/70 bg-[#071f35]/40 px-3 py-3 text-center text-sm text-slate-400">
+              No incident alerts found for this range.
+            </p>
+          )}
           <button onClick={generateIncidentReport} className="flex items-center gap-1 text-sm text-[#06b6d4] mt-4 hover:text-[#22d3ee] transition-colors">
             View Incident Report <ArrowRight className="w-4 h-4" />
           </button>
@@ -543,7 +532,11 @@ export default function AnalyticsPage({ onNavigate }: { onNavigate?: (page: stri
             </div>
           </div>
           <div className="space-y-3">
-            {(dynamicTopAlerts.length > 0 ? dynamicTopAlerts : topAlerts).map((alert, i) => {
+            {dynamicTopAlerts.length === 0 ? (
+              <p className="rounded-lg border border-[#0d3660]/70 bg-[#071f35]/40 px-3 py-8 text-center text-sm text-slate-400">
+                No alerts found for this range.
+              </p>
+            ) : dynamicTopAlerts.map((alert, i) => {
               const Icon = alert.icon;
               return (
                 <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[#071f35]/50 hover:bg-[#071f35] transition-all animate-slide-in-up" style={{ animationDelay: `${i * 80}ms` }}>

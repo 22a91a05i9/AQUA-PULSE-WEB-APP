@@ -122,6 +122,14 @@ class AgentCreate(BaseModel):
     farm_type_id: int
     species_id: int
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_lowercase_email(cls, value: str) -> str:
+        email = str(value).strip()
+        if email != email.lower():
+            raise ValueError("Email must be lowercase")
+        return email
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:

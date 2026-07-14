@@ -14,6 +14,8 @@ import {
   Fish,
 } from 'lucide-react';
 import { useTranslation } from '../lib/i18n';
+import { apiRequest } from '../lib/api';
+import { getAuthSession } from '../lib/auth';
 
 interface SidebarProps {
   currentPage: string;
@@ -28,7 +30,7 @@ export const agentNavItems = [
   { id: 'sites', label: 'Sites', icon: MapPin },
   { id: 'devices', label: 'Devices', icon: Cpu },
   { id: 'live', label: 'Live Monitoring', icon: Activity },
-  { id: 'alerts', label: 'Alerts', icon: Bell, badge: 12 },
+  { id: 'alerts', label: 'Alerts', icon: Bell },
   { id: 'sos', label: 'SOS Emergency', icon: Shield },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'reports', label: 'Reports', icon: FileText },
@@ -38,6 +40,7 @@ export const agentNavItems = [
 export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, setCollapsed }: SidebarProps) {
   const [hovered, setHovered] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const [alertCount, setAlertCount] = useState(0);
   const { t } = useTranslation();
 
   const isCollapsed = collapsed && !hovered;
@@ -48,6 +51,24 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
       return () => clearTimeout(timer);
     }
   }, [animating]);
+
+  useEffect(() => {
+    async function loadAlertCount() {
+      try {
+        const session = getAuthSession();
+        if (!session) return;
+        const alerts = await apiRequest<Array<{ status: string; severity?: string }>>('/readings/alerts/me', {
+          token: session.token,
+        });
+        setAlertCount(alerts.filter((alert) => alert.status !== 'safe' && alert.status !== 'resolved').length);
+      } catch (err) {
+        console.error('Failed to load sidebar alert count:', err);
+        setAlertCount(0);
+      }
+    }
+
+    loadAlertCount();
+  }, []);
 
   return (
     <aside
@@ -92,9 +113,9 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, collapsed, 
                   {t(item.label)}
                 </span>
               )}
-              {item.badge && (
+              {item.id === 'alerts' && alertCount > 0 && (
                 <span className={`badge-pulse ${isCollapsed ? 'absolute right-1 top-1 w-3 h-3 text-[8px] flex items-center justify-center' : 'ml-auto'} bg-[#ef4444] text-white rounded-full text-[10px] font-bold px-1.5 py-0.5 min-w-[18px] text-center`}>
-                  {item.badge}
+                  {alertCount > 99 ? '99+' : alertCount}
                 </span>
               )}
               {isCollapsed && isActive && (

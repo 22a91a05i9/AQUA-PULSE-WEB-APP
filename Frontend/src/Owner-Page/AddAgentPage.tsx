@@ -22,6 +22,7 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [farmTypes, setFarmTypes] = useState<any[]>([]);
   const [allSpecies, setAllSpecies] = useState<any[]>([]);
+  const [existingAgents, setExistingAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadMeta() {
@@ -29,13 +30,15 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
       const session = getAuthSession();
       if (!session) return;
 
-      const [typesRes, speciesRes] = await Promise.all([
+      const [typesRes, speciesRes, agentsRes] = await Promise.all([
         apiRequest<any[]>('/meta/farm-types', { token: session.token }),
         apiRequest<any[]>('/meta/species', { token: session.token }),
+        apiRequest<any[]>('/owner/agents', { token: session.token }),
       ]);
 
       setFarmTypes(typesRes);
       setAllSpecies(speciesRes);
+      setExistingAgents(agentsRes);
     } catch (err) {
       console.error('Failed to load metadata:', err);
     } finally {
@@ -74,6 +77,15 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
       setErrorMsg(PASSWORD_POLICY_MESSAGE);
       return;
     }
+    const email = form.email.trim();
+    if (email !== email.toLowerCase()) {
+      setErrorMsg('Email must be lowercase.');
+      return;
+    }
+    if (existingAgents.some((agent) => String(agent.email || '').trim().toLowerCase() === email)) {
+      setErrorMsg('Email already exists.');
+      return;
+    }
 
     try {
       const session = getAuthSession();
@@ -84,7 +96,7 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
         token: session.token,
         body: {
           full_name: form.name.trim(),
-          email: form.email.trim(),
+          email,
           phone: form.phone.trim(),
           password: form.password.trim(),
           farm_type_id: Number(form.farmTypeId),

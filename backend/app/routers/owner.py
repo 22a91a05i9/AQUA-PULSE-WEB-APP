@@ -142,7 +142,8 @@ def create_agent(
     current_user: User = Depends(require_role("owner")),
     db: Session = Depends(get_db),
 ):
-    existing = db.scalar(select(User).where(User.email == payload.email))
+    normalized_email = payload.email.strip().lower()
+    existing = db.scalar(select(User).where(func.lower(func.trim(User.email)) == normalized_email))
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
     phone = validate_agent_phone(db, payload.phone)
@@ -155,7 +156,7 @@ def create_agent(
     agent = User(
         role="agent",
         full_name=payload.full_name,
-        email=payload.email,
+        email=normalized_email,
         phone=phone,
         password_hash=hash_password(payload.password),
         owner_user_id=current_user.id,
@@ -302,7 +303,7 @@ def assign_agent_to_site(
     return {"message": "Agent assigned successfully"}
 
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 import re
 
 PHONE_PATTERN = re.compile(r"^\d{10}$")
@@ -324,6 +325,16 @@ class AgentUpdate(BaseModel):
     email: EmailStr | None = None
     phone: str | None = None
     password: str | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_lowercase_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        email = str(value).strip()
+        if email != email.lower():
+            raise ValueError("Email must be lowercase")
+        return email
 
 
 class OwnerProfileUpdate(BaseModel):
@@ -414,7 +425,16 @@ def update_agent(
     if payload.full_name is not None:
         agent.full_name = payload.full_name
     if payload.email is not None:
-        agent.email = payload.email
+        normalized_email = payload.email.strip().lower()
+        duplicate_email = db.scalar(
+            select(User).where(
+                func.lower(func.trim(User.email)) == normalized_email,
+                User.id != agent.id,
+            )
+        )
+        if duplicate_email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+        agent.email = normalized_email
     if payload.phone is not None:
         agent.phone = validate_agent_phone(db, payload.phone, exclude_user_id=agent.id)
     if payload.password is not None:

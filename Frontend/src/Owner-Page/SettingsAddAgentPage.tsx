@@ -60,6 +60,15 @@ export default function SettingsAddAgentPage({ onBack }: { onBack: () => void })
       setMessage({ text: PASSWORD_POLICY_MESSAGE, type: 'error' });
       return;
     }
+    const email = form.email.trim();
+    if (email !== email.toLowerCase()) {
+      setMessage({ text: 'Email must be lowercase.', type: 'error' });
+      return;
+    }
+    if ((data?.agents || []).some((agent: any) => String(agent.email || '').trim().toLowerCase() === email)) {
+      setMessage({ text: 'Email already exists.', type: 'error' });
+      return;
+    }
 
     setSubmitting(true);
     setMessage(null);
@@ -78,7 +87,7 @@ export default function SettingsAddAgentPage({ onBack }: { onBack: () => void })
         token: session.token,
         body: {
           full_name: form.name.trim(),
-          email: form.email.trim(),
+          email,
           phone: form.phone.trim(),
           password: form.password,
           farm_type_id: selectedSite.farm_type_id,
