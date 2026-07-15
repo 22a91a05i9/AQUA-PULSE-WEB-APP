@@ -1,8 +1,59 @@
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 
+AQUA_TABLES = {
+    "agent_contacts",
+    "alerts",
+    "device_owner_assignments",
+    "device_sensor_assignments",
+    "device_site_assignments",
+    "devices",
+    "emergency_incidents",
+    "farm_types",
+    "notification_deliveries",
+    "password_reset_tokens",
+    "push_subscriptions",
+    "report_schedules",
+    "reports",
+    "sensor_readings",
+    "sensor_types",
+    "site_agent_assignments",
+    "sites",
+    "species",
+    "user_settings",
+    "users",
+}
+
+
+def cleanup_non_aqua_schema(engine: Engine) -> None:
+    """Remove tables/users that belong to older non-Aqua projects."""
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        existing_tables = set(inspector.get_table_names())
+        tables_to_drop = sorted(
+            table
+            for table in existing_tables - AQUA_TABLES
+            if not table.startswith("sqlite_")
+        )
+        preparer = connection.dialect.identifier_preparer
+
+        if engine.dialect.name == "sqlite":
+            connection.execute(text("PRAGMA foreign_keys=OFF"))
+            for table in tables_to_drop:
+                connection.execute(text(f"DROP TABLE IF EXISTS {preparer.quote(table)}"))
+            connection.execute(text("PRAGMA foreign_keys=ON"))
+        else:
+            for table in tables_to_drop:
+                connection.execute(text(f"DROP TABLE IF EXISTS {preparer.quote(table)} CASCADE"))
+
+        if "users" in existing_tables:
+            connection.execute(text("DELETE FROM users WHERE LOWER(role) IN ('teacher', 'student')"))
+
+
 def apply_schema_patches(engine: Engine) -> None:
+    cleanup_non_aqua_schema(engine)
+
     with engine.begin() as connection:
         if engine.dialect.name == "sqlite":
             connection.execute(
@@ -351,3 +402,14 @@ def apply_schema_patches(engine: Engine) -> None:
             )
 
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_portal_access TIMESTAMP"))
+
+            connection.execute(text("ALTER TABLE sites DROP CONSTRAINT IF EXISTS sites_site_type_check"))
+            connection.execute(
+                text(
+                    """
+                    ALTER TABLE sites
+                    ADD CONSTRAINT sites_site_type_check
+                    CHECK (site_type IN ('pond', 'lake', 'tank', 'hatchery', 'raceway', 'swimming_pool', 'other'))
+                    """
+                )
+            )

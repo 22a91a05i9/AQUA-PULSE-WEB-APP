@@ -38,10 +38,30 @@ type Site = {
   agents: number;
   score: number;
   status: 'Healthy' | 'Warning' | 'Maintenance';
-  type: 'Freshwater' | 'Brackishwater';
+  type: string;
 };
 
 const siteImage = '/images/dashboard_attached.png';
+
+function formatSiteType(siteType: string | null | undefined): string {
+  const normalized = String(siteType || '').trim().toLowerCase();
+  if (normalized === 'swimming_pool') return 'Swimming Pool';
+  if (normalized === 'pond') return 'Pond';
+  if (!normalized) return 'Site';
+  return normalized
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function normalizeArea(value: string): string | null {
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*acres?$/i);
+  if (!match) return null;
+  const acres = Number(match[1]);
+  if (!Number.isFinite(acres) || acres <= 0) return null;
+  return `${acres.toFixed(1)} acres`;
+}
 
 function formatSeen(dateStr: string | null | undefined): string {
   if (!dateStr) return 'Never';
@@ -177,6 +197,8 @@ export default function SitesPage() {
   const [regionFilter, setRegionFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [creatingSite, setCreatingSite] = useState(false);
+  const [farmTypes, setFarmTypes] = useState<any[]>([]);
+  const [allSpecies, setAllSpecies] = useState<any[]>([]);
   const [deviceList, setDeviceList] = useState<any[]>([]);
   const [alertsList, setAlertsList] = useState<any[]>([]);
   const [readingsList, setReadingsList] = useState<any[]>([]);
@@ -236,7 +258,10 @@ export default function SitesPage() {
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [siteType, setSiteType] = useState('pond');
+  const [farmTypeId, setFarmTypeId] = useState('');
+  const [speciesId, setSpeciesId] = useState('');
   const [area, setArea] = useState('4.0 acres');
+  const filteredSpecies = allSpecies.filter((species) => String(species.farm_type_id) === farmTypeId);
 
   const loadData = async () => {
     const session = getAuthSession();
@@ -247,9 +272,11 @@ export default function SitesPage() {
     }
 
     try {
-      const res = await apiRequest<any>('/owner/overview', {
-        token: session.token,
-      });
+      const [res, farmTypesRes, speciesRes] = await Promise.all([
+        apiRequest<any>('/owner/overview', { token: session.token }),
+        apiRequest<any[]>('/meta/farm-types', { token: session.token }),
+        apiRequest<any[]>('/meta/species', { token: session.token }),
+      ]);
 
       const devices = res.devices || [];
       const alerts = res.alerts || [];
@@ -262,6 +289,8 @@ export default function SitesPage() {
       setReadingsList(readings);
       setAgentsList(agents);
       setAssignmentsList(assignments);
+      setFarmTypes((farmTypesRes || []).filter((farmType: any) => farmType.code !== 'general'));
+      setAllSpecies(speciesRes || []);
 
       const normalizedSites: Site[] = (res.sites || []).map((s: any) => {
         const siteDevicesCount = s.devices_count ?? 0;
@@ -305,7 +334,7 @@ export default function SitesPage() {
           agents: siteAgentsCount,
           score: siteScore,
           status: siteStatus,
-          type: (s.name || '').toLowerCase().includes('brackish') ? 'Brackishwater' : 'Freshwater',
+          type: formatSiteType(s.site_type),
         };
       });
 
@@ -357,28 +386,43 @@ export default function SitesPage() {
       setNotice('Site already created.');
       return;
     }
+    if (siteType === 'pond' && (!farmTypeId || !speciesId)) {
+      setNotice('Select farm type and species for pond sites.');
+      return;
+    }
+    const normalizedArea = normalizeArea(area);
+    if (!normalizedArea) {
+      setNotice('Enter farming area in acres, for example 4.0 acres or 40 acres.');
+      return;
+    }
     setCreatingSite(true);
     try {
       const session = getAuthSession();
       if (!session) return;
 
-      await apiRequest('/owner/sites', {
-        method: 'POST',
-        token: session.token,
-        body: {
+      const body: Record<string, unknown> = {
           name,
           site_type: siteType,
           location_text: location,
-          farm_type_id: 1,
-          species_id: 1,
-          custom_thresholds: { area },
-        },
+          custom_thresholds: { area: normalizedArea },
+      };
+      if (siteType === 'pond') {
+        body.farm_type_id = Number(farmTypeId);
+        body.species_id = Number(speciesId);
+      }
+
+      await apiRequest('/owner/sites', {
+        method: 'POST',
+        token: session.token,
+        body,
       });
 
       setShowAddModal(false);
       setName('');
       setLocation('');
       setSiteType('pond');
+      setFarmTypeId('');
+      setSpeciesId('');
       setArea('4.0 acres');
       loadData();
     } catch (err: any) {
@@ -508,14 +552,70 @@ export default function SitesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-white mb-1.5">Site Type</label>
-                  <select value={siteType} onChange={e => setSiteType(e.target.value)} className="h-10 w-full rounded border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none focus:border-cyan-400">
+                  <select
+                    value={siteType}
+                    onChange={e => {
+                      setSiteType(e.target.value);
+                      if (e.target.value !== 'pond') {
+                        setFarmTypeId('');
+                        setSpeciesId('');
+                      }
+                    }}
+                    className="h-10 w-full rounded border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none focus:border-cyan-400"
+                  >
                     <option value="pond">Pond</option>
-                    <option value="cage">Cage</option>
+                    <option value="swimming_pool">Swimming Pool</option>
                   </select>
                 </div>
+                {siteType === 'pond' && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-semibold text-white mb-1.5">Farm Type</label>
+                      <select
+                        required
+                        value={farmTypeId}
+                        onChange={e => {
+                          setFarmTypeId(e.target.value);
+                          setSpeciesId('');
+                        }}
+                        className="h-10 w-full rounded border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none focus:border-cyan-400"
+                      >
+                        <option value="">Select farm type</option>
+                        {farmTypes.map((farmType) => (
+                          <option key={farmType.id} value={farmType.id}>{farmType.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-white mb-1.5">Farmed Species</label>
+                      <select
+                        required
+                        value={speciesId}
+                        onChange={e => setSpeciesId(e.target.value)}
+                        disabled={!farmTypeId}
+                        className="h-10 w-full rounded border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none focus:border-cyan-400 disabled:opacity-50"
+                      >
+                        <option value="">{farmTypeId ? 'Select species' : 'Select farm type first'}</option>
+                        {filteredSpecies.map((species) => (
+                          <option key={species.id} value={species.id}>{species.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-semibold text-white mb-1.5">Farming Area</label>
-                  <input type="text" value={area} onChange={e => setArea(e.target.value)} placeholder="e.g. 4.5 acres" className="h-10 w-full rounded border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none focus:border-cyan-400" />
+                  <input
+                    type="text"
+                    value={area}
+                    onChange={e => setArea(e.target.value)}
+                    onBlur={() => {
+                      const normalizedArea = normalizeArea(area);
+                      if (normalizedArea) setArea(normalizedArea);
+                    }}
+                    placeholder="e.g. 4.0 acres"
+                    className="h-10 w-full rounded border border-[#0d3660] bg-[#020b18]/60 px-3 text-sm text-white outline-none focus:border-cyan-400"
+                  />
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3 border-t border-[#0d3660]/60 pt-4">

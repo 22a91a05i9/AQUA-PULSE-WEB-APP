@@ -19,12 +19,24 @@ export default function AssignmentsPage() {
   const [devices, setDevices] = useState<any[]>([]);
   const [sites, setSites] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
+  const [agentAssignments, setAgentAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingDeviceMove, setPendingDeviceMove] = useState<{
     device: any;
     currentSite: any | null;
     nextSite: any;
   } | null>(null);
+
+  const assignedAgentIdsForSite = form.agentSiteId
+    ? new Set(
+        agentAssignments
+          .filter((assignment) => String(assignment.site_id) === form.agentSiteId)
+          .map((assignment) => Number(assignment.agent_user_id)),
+      )
+    : new Set<number>();
+  const availableAgentsForSelectedSite = form.agentSiteId
+    ? agents.filter((agent) => !assignedAgentIdsForSite.has(Number(agent.id)))
+    : agents;
 
   async function loadData() {
     try {
@@ -38,6 +50,7 @@ export default function AssignmentsPage() {
       setDevices(res.devices || []);
       setSites(res.sites || []);
       setAgents(res.agents || []);
+      setAgentAssignments(res.agent_assignments || []);
     } catch (err) {
       console.error('Failed to load assignments overview data:', err);
     } finally {
@@ -180,7 +193,11 @@ export default function AssignmentsPage() {
           icon={MapPin}
           label="Site"
           value={form.agentSiteId}
-          onChange={(value) => updateField('agentSiteId', value)}
+          onChange={(value) => {
+            setForm((current) => ({ ...current, agentSiteId: value, agentUserId: '' }));
+            setMessage('');
+            setErrorMsg('');
+          }}
           options={sites.map(s => ({ value: String(s.id), label: s.name }))}
           placeholder="Select site"
         />
@@ -189,9 +206,14 @@ export default function AssignmentsPage() {
           label="Agent"
           value={form.agentUserId}
           onChange={(value) => updateField('agentUserId', value)}
-          options={agents.map(a => ({ value: String(a.id), label: `${a.full_name} (${a.email})` }))}
-          placeholder="Select agent"
+          options={availableAgentsForSelectedSite.map(a => ({ value: String(a.id), label: `${a.full_name} (${a.email})` }))}
+          placeholder={form.agentSiteId ? 'Select agent' : 'Select site first'}
         />
+        {form.agentSiteId && availableAgentsForSelectedSite.length === 0 && (
+          <p className="-mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            All agents are already assigned to this site.
+          </p>
+        )}
         <button
           onClick={assignAgent}
           className="mt-8 h-16 w-full rounded-lg bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-700 text-base font-bold text-white shadow-[0_16px_45px_rgba(14,165,233,0.24)] transition hover:brightness-110"

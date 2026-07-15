@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BadgePlus, ChevronDown, Mail, Phone, UserPlus, UserRound, KeyRound } from 'lucide-react';
+import { Mail, Phone, UserPlus, UserRound, KeyRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
@@ -10,8 +10,6 @@ const initialForm = {
   phone: '',
   email: '',
   password: '',
-  farmTypeId: '',
-  speciesId: '',
 };
 
 const phoneErrorMessage = 'Please enter a valid 10-digit phone number.';
@@ -20,8 +18,6 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [farmTypes, setFarmTypes] = useState<any[]>([]);
-  const [allSpecies, setAllSpecies] = useState<any[]>([]);
   const [existingAgents, setExistingAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,14 +26,10 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
       const session = getAuthSession();
       if (!session) return;
 
-      const [typesRes, speciesRes, agentsRes] = await Promise.all([
-        apiRequest<any[]>('/meta/farm-types', { token: session.token }),
-        apiRequest<any[]>('/meta/species', { token: session.token }),
+      const [agentsRes] = await Promise.all([
         apiRequest<any[]>('/owner/agents', { token: session.token }),
       ]);
 
-      setFarmTypes(typesRes);
-      setAllSpecies(speciesRes);
       setExistingAgents(agentsRes);
     } catch (err) {
       console.error('Failed to load metadata:', err);
@@ -52,20 +44,13 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
 
   const updateField = (field: keyof typeof form, value: string) => {
     const nextValue = field === 'phone' ? value.replace(/\D/g, '').slice(0, 10) : value;
-    setForm((current) => {
-      const next = { ...current, [field]: nextValue };
-      // If farm type changes, reset species selection
-      if (field === 'farmTypeId') {
-        next.speciesId = '';
-      }
-      return next;
-    });
+    setForm((current) => ({ ...current, [field]: nextValue }));
     setMessage('');
     setErrorMsg('');
   };
 
   const submitAgent = async () => {
-    if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || !form.password.trim() || !form.farmTypeId || !form.speciesId) {
+    if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || !form.password.trim()) {
       setErrorMsg('Please enter all required fields.');
       return;
     }
@@ -99,8 +84,6 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
           email,
           phone: form.phone.trim(),
           password: form.password.trim(),
-          farm_type_id: Number(form.farmTypeId),
-          species_id: Number(form.speciesId),
         },
       });
 
@@ -115,9 +98,6 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
       setErrorMsg(err.message === 'Phone number already exists.' ? 'Phone number already exists.' : err.message || 'Failed to create agent.');
     }
   };
-
-  // Filter species based on the selected farm type
-  const filteredSpecies = allSpecies.filter(s => String(s.farm_type_id) === form.farmTypeId);
 
   if (loading) {
     return (
@@ -184,30 +164,6 @@ export default function AddAgentPage({ onBack }: { onBack: () => void }) {
           </div>
         </FormPanel>
 
-        <FormPanel number="2" title="Farming Specialization">
-          <div className="grid grid-cols-1 gap-x-8 gap-y-5 xl:grid-cols-2">
-            <SelectLike
-              icon={BadgePlus}
-              label="Farm Type"
-              required
-              value={form.farmTypeId}
-              onChange={(value) => updateField('farmTypeId', value)}
-              options={farmTypes.map(t => ({ value: String(t.id), label: t.name }))}
-              placeholder="Select Farm Type"
-            />
-            <SelectLike
-              icon={BadgePlus}
-              label="Farmed Species"
-              required
-              value={form.speciesId}
-              onChange={(value) => updateField('speciesId', value)}
-              options={filteredSpecies.map(s => ({ value: String(s.id), label: s.name }))}
-              placeholder={form.farmTypeId ? "Select Species" : "Select Farm Type first"}
-              disabled={!form.farmTypeId}
-            />
-          </div>
-        </FormPanel>
-
         {message && <p className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{message}</p>}
         {errorMsg && <p className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{errorMsg}</p>}
 
@@ -267,45 +223,6 @@ function Field({
           maxLength={maxLength}
           className="h-11 w-full rounded-md border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300"
         />
-      </div>
-    </label>
-  );
-}
-
-function SelectLike({
-  icon: Icon,
-  label,
-  required,
-  value,
-  onChange,
-  options,
-  placeholder,
-  disabled,
-}: {
-  icon: LucideIcon;
-  label: string;
-  required?: boolean;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-  placeholder: string;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm text-white">{label} {required && <span className="text-red-400">*</span>}</span>
-      <div className="relative mt-2">
-        <Icon className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-        <select
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          disabled={disabled}
-          className="h-11 w-full appearance-none rounded-md border border-[#0d3660] bg-[#020b18]/50 pl-12 pr-12 text-sm text-white outline-none transition focus:border-cyan-300 disabled:opacity-50"
-        >
-          <option value="">{placeholder}</option>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-200" />
       </div>
     </label>
   );

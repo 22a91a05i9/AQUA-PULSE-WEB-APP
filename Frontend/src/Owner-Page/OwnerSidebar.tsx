@@ -25,7 +25,7 @@ export const ownerNavItems = [
   { id: 'devices', label: 'Devices', icon: Cpu },
   { id: 'live', label: 'Live Monitoring', icon: Activity, badge: 'Live', badgeTone: 'green' },
   { id: 'assignments', label: 'Assignments', icon: ClipboardList },
-  { id: 'alerts', label: 'Alerts', icon: Bell, badge: '12', badgeTone: 'red' },
+  { id: 'alerts', label: 'Alerts', icon: Bell },
   { id: 'sos', label: 'SOS Emergency', icon: Shield, badge: 'SOS', badgeTone: 'red' },
   { id: 'data', label: 'Data', icon: Database },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },

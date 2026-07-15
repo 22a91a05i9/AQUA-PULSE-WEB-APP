@@ -119,8 +119,6 @@ class AgentCreate(BaseModel):
     email: EmailStr
     phone: str | None = None
     password: str = Field(min_length=8)
-    farm_type_id: int
-    species_id: int
 
     @field_validator("email", mode="before")
     @classmethod
@@ -207,8 +205,8 @@ class SiteCreate(BaseModel):
     name: str
     site_type: str
     location_text: str | None = None
-    farm_type_id: int
-    species_id: int
+    farm_type_id: int | None = None
+    species_id: int | None = None
     custom_thresholds: dict | None = None
 
     @field_validator("name")

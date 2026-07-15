@@ -21,17 +21,6 @@ const statusClass: Record<Agent['status'], string> = {
   Offline: 'text-red-400',
 };
 
-const defaultAgents: Agent[] = [
-  { id: 'AG-001', name: 'Agent-001', site: 'North Farm', area: 'Area 1', status: 'Online', lastSeen: '2 min ago', score: 98 },
-  { id: 'AG-004', name: 'Agent-002', site: 'East Zone', area: 'Area 1', status: 'Online', lastSeen: '5 min ago', score: 92 },
-  { id: 'AG-008', name: 'Agent-003', site: 'Blue Farm', area: 'Area 1', status: 'Warning', lastSeen: '10 min ago', score: 72 },
-  { id: 'AG-017', name: 'Agent-004', site: 'West Farm', area: 'Area 1', status: 'Offline', lastSeen: '1 hr ago', score: 0 },
-  { id: 'AG-042', name: 'Agent-005', site: 'Central Farm', area: 'Area 1', status: 'Online', lastSeen: '3 min ago', score: 88 },
-  { id: 'AG-056', name: 'Agent-006', site: 'South Zone', area: 'Area 2', status: 'Online', lastSeen: '8 min ago', score: 85 },
-  { id: 'AG-061', name: 'Agent-007', site: 'Coastal Farm', area: 'Area 2', status: 'Warning', lastSeen: '15 min ago', score: 68 },
-  { id: 'AG-078', name: 'Agent-008', site: 'Lake View Farm', area: 'Area 2', status: 'Online', lastSeen: '4 min ago', score: 90 },
-];
-
 export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
   const [agentsList, setAgentsList] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +36,11 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
     try {
       const session = getAuthSession();
       if (!session) return;
+      if (!/^\d+$/.test(agent.id)) {
+        setNotice('This agent cannot be deleted because it was not loaded from the database.');
+        setAgentToDelete(null);
+        return;
+      }
       await apiRequest(`/owner/agents/${agent.id}`, {
         method: 'DELETE',
         token: session.token,
@@ -87,10 +81,22 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
       try {
         const session = getAuthSession();
         if (session) {
-          const res = await apiRequest<any[]>('/owner/agents', {
+          const res = await apiRequest<any>('/owner/overview', {
             token: session.token,
           });
-          const mappedAgents: Agent[] = res.map((a: any) => {
+          const sitesById = new Map(
+            (res.sites || []).map((site: any) => [Number(site.id), site.name || `Site #${site.id}`]),
+          );
+          const assignedSiteNamesByAgent = new Map<number, string[]>();
+          (res.agent_assignments || []).forEach((assignment: any) => {
+            const agentId = Number(assignment.agent_user_id);
+            const siteName = sitesById.get(Number(assignment.site_id));
+            if (!siteName) return;
+            const current = assignedSiteNamesByAgent.get(agentId) || [];
+            assignedSiteNamesByAgent.set(agentId, [...current, String(siteName)]);
+          });
+
+          const mappedAgents: Agent[] = (res.agents || []).map((a: any) => {
             let lastSeen = 'Never';
             if (a.last_portal_access) {
               const lastAccessTime = new Date(a.last_portal_access);
@@ -111,11 +117,12 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
               }
             }
 
+            const assignedSiteNames = assignedSiteNamesByAgent.get(Number(a.id)) || [];
             return {
               id: String(a.id),
               name: a.full_name || 'Unnamed Agent',
-              site: a.farm_type_id ? `Site Type #${a.farm_type_id}` : 'General',
-              area: 'Area 1',
+              site: assignedSiteNames.join(', ') || 'Unassigned',
+              area: `${assignedSiteNames.length} Site${assignedSiteNames.length === 1 ? '' : 's'}`,
               status: a.is_active ? 'Online' : 'Offline',
               lastSeen,
               score: 95,
@@ -123,9 +130,10 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
           });
           setAgentsList(mappedAgents);
         }
-      } catch (err) {
-        console.error('Failed to load agents, using fallback defaults: ', err);
-        setAgentsList(defaultAgents);
+      } catch (err: any) {
+        console.error('Failed to load agents:', err);
+        setAgentsList([]);
+        setNotice(err?.detail || err?.message || 'Failed to load agents.');
       } finally {
         setLoading(false);
       }
@@ -250,6 +258,11 @@ export default function AgentsPage({ onAddAgent }: { onAddAgent: () => void }) {
             />
           </section>
         ))}
+        {filteredAgents.length === 0 && (
+          <p className="rounded-lg border border-[#0d3660] bg-[#020b18]/60 px-5 py-6 text-sm text-slate-300">
+            No agents found.
+          </p>
+        )}
       </div>
 
       <div className="flex items-center justify-between">

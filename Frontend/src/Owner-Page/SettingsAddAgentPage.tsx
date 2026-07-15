@@ -90,8 +90,6 @@ export default function SettingsAddAgentPage({ onBack }: { onBack: () => void })
           email,
           phone: form.phone.trim(),
           password: form.password,
-          farm_type_id: selectedSite.farm_type_id,
-          species_id: selectedSite.species_id,
         },
       });
 

@@ -6,6 +6,7 @@ import { apiRequest } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
 import { isAllowedPassword, PASSWORD_POLICY_MESSAGE } from '../lib/passwordPolicy';
 import { exportRowsToCsv, rowMatchesSearch, RowActionMenu } from '../lib/tableActions';
+import { DialogButton, ProjectDialog } from '../lib/projectDialog';
 
 interface OwnerRecord {
   id: number | null;
@@ -34,6 +35,7 @@ export default function OwnersPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All Status');
   const [editingOwnerId, setEditingOwnerId] = useState<number | null>(null);
+  const [ownerToDelete, setOwnerToDelete] = useState<OwnerRecord | null>(null);
 
   const loadOwners = async () => {
     try {
@@ -176,21 +178,24 @@ export default function OwnersPage() {
   };
 
   const deleteOwner = async (owner: OwnerRecord) => {
-    if (!window.confirm(`Delete ${owner.name}? This removes the owner from the database.`)) return;
+    try {
+      const session = getAuthSession();
+      if (session && owner.id) {
+        await apiRequest(`/manager/owners/${owner.id}`, {
+          method: 'DELETE',
+          token: session.token,
+        });
+        await loadOwners();
+      } else {
+        setOwnerList((current) => current.filter((item) => item.email !== owner.email));
+      }
 
-    const session = getAuthSession();
-    if (session && owner.id) {
-      await apiRequest(`/manager/owners/${owner.id}`, {
-        method: 'DELETE',
-        token: session.token,
-      });
-      loadOwners();
-    } else {
-      setOwnerList((current) => current.filter((item) => item.email !== owner.email));
+      if (selectedOwner?.email === owner.email) setSelectedOwner(null);
+      setOwnerToDelete(null);
+      setMessage('Owner deleted successfully.');
+    } catch (err: any) {
+      setMessage(err?.detail || err?.message || 'Failed to delete owner.');
     }
-
-    if (selectedOwner?.email === owner.email) setSelectedOwner(null);
-    setMessage('Owner deleted successfully.');
   };
 
   const exportOwners = () => {
@@ -287,7 +292,7 @@ export default function OwnersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                        <RowActionMenu onEdit={() => editOwner(owner)} onDelete={() => deleteOwner(owner)} />
+                        <RowActionMenu onEdit={() => editOwner(owner)} onDelete={() => setOwnerToDelete(owner)} />
                       </td>
                     </tr>
                   ))
@@ -393,6 +398,19 @@ export default function OwnersPage() {
           )}
         </div>
       </div>
+      {ownerToDelete && (
+        <ProjectDialog
+          title="Delete Owner?"
+          description={`This will permanently delete "${ownerToDelete.name}" from the users table. Their sites, agents, alerts, reports, and login data will be removed; assigned devices will be returned to inactive and unassigned.`}
+          onClose={() => setOwnerToDelete(null)}
+          footer={
+            <>
+              <DialogButton onClick={() => setOwnerToDelete(null)}>Cancel</DialogButton>
+              <DialogButton tone="danger" onClick={() => deleteOwner(ownerToDelete)}>Delete Owner</DialogButton>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

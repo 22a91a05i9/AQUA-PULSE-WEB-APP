@@ -1,13 +1,33 @@
 from datetime import datetime
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select, delete
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.db import get_db
 from app.deps import require_role
-from app.models import Alert, Device, DeviceOwnerAssignment, DeviceSiteAssignment, FarmType, Reading, Site, SiteAgentAssignment, Species, User, UserSetting
+from app.models import (
+    AgentContact,
+    Alert,
+    Device,
+    DeviceOwnerAssignment,
+    DeviceSiteAssignment,
+    EmergencyIncident,
+    FarmType,
+    NotificationDelivery,
+    PasswordResetToken,
+    PushSubscription,
+    Reading,
+    Report,
+    ReportSchedule,
+    Site,
+    SiteAgentAssignment,
+    Species,
+    User,
+    UserSetting,
+)
 from app.schemas import (
     AgentCreate,
     AssignAgentRequest,
@@ -148,11 +168,6 @@ def create_agent(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
     phone = validate_agent_phone(db, payload.phone)
 
-    farm_type = db.scalar(select(FarmType).where(FarmType.id == payload.farm_type_id))
-    species = db.scalar(select(Species).where(Species.id == payload.species_id))
-    if not farm_type or not species or species.farm_type_id != farm_type.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid farm type or species")
-
     agent = User(
         role="agent",
         full_name=payload.full_name,
@@ -161,8 +176,6 @@ def create_agent(
         password_hash=hash_password(payload.password),
         owner_user_id=current_user.id,
         created_by_id=current_user.id,
-        farm_type_id=farm_type.id,
-        species_id=species.id,
     )
     db.add(agent)
     db.commit()
@@ -195,19 +208,51 @@ def create_site(
     if existing_site:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Site already created.")
 
-    farm_type = db.scalar(select(FarmType).where(FarmType.id == payload.farm_type_id))
-    species = db.scalar(select(Species).where(Species.id == payload.species_id))
-    if not farm_type or not species or species.farm_type_id != farm_type.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid farm type or species")
+    site_type = normalize_create_site_type(payload.site_type)
+    if site_type == "swimming_pool":
+        farm_type = db.scalar(select(FarmType).where(FarmType.code == "general"))
+        if not farm_type:
+            farm_type = FarmType(code="general", name="General")
+            db.add(farm_type)
+            db.flush()
+        species = db.scalar(
+            select(Species).where(
+                Species.farm_type_id == farm_type.id,
+                Species.name == "Swimming Pool",
+            )
+        )
+        if not species:
+            species = Species(
+                farm_type_id=farm_type.id,
+                name="Swimming Pool",
+                scientific_name=None,
+                default_thresholds={
+                    "ph": {"min": 7.2, "max": 7.8},
+                    "temperature_c": {"min": 20.0, "max": 32.0},
+                    "turbidity": {"min": 0.0, "max": 10.0},
+                },
+            )
+            db.add(species)
+            db.flush()
+    if site_type == "pond":
+        if payload.farm_type_id is None or payload.species_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Select farm type and species for pond sites",
+            )
+        farm_type = db.scalar(select(FarmType).where(FarmType.id == payload.farm_type_id))
+        species = db.scalar(select(Species).where(Species.id == payload.species_id))
+        if not farm_type or not species or species.farm_type_id != farm_type.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid farm type or species")
 
     site = Site(
         owner_user_id=current_user.id,
         name=payload.name,
-        site_type=payload.site_type,
+        site_type=site_type,
         location_text=payload.location_text,
-        farm_type_id=payload.farm_type_id,
-        species_id=payload.species_id,
-        custom_thresholds=payload.custom_thresholds,
+        farm_type_id=farm_type.id,
+        species_id=species.id,
+        custom_thresholds=normalize_site_area(payload.custom_thresholds),
     )
     db.add(site)
     db.commit()
@@ -277,12 +322,6 @@ def assign_agent_to_site(
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    if agent.farm_type_id != site.farm_type_id or agent.species_id != site.species_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Agent farming/species must match the site farming/species",
-        )
-
     existing = db.scalar(
         select(SiteAgentAssignment).where(
             SiteAgentAssignment.site_id == site.id,
@@ -304,9 +343,15 @@ def assign_agent_to_site(
 
 
 from pydantic import BaseModel, EmailStr, field_validator
-import re
 
 PHONE_PATTERN = re.compile(r"^\d{10}$")
+AREA_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)\s*acres?$", re.IGNORECASE)
+SITE_TYPE_ALIASES = {
+    "pond": "pond",
+    "swimming_pool": "swimming_pool",
+    "swimming pool": "swimming_pool",
+    "pool": "swimming_pool",
+}
 
 
 def validate_agent_phone(db: Session, phone: str | None, exclude_user_id: int | None = None) -> str:
@@ -319,6 +364,36 @@ def validate_agent_phone(db: Session, phone: str | None, exclude_user_id: int | 
     if db.scalar(duplicate_query):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already exists.")
     return normalized
+
+
+def normalize_site_area(custom_thresholds: dict | None) -> dict | None:
+    if not custom_thresholds or "area" not in custom_thresholds:
+        return custom_thresholds
+    area_text = str(custom_thresholds.get("area") or "").strip()
+    match = AREA_PATTERN.fullmatch(area_text)
+    if not match:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Enter farming area in acres, for example 4.0 acres or 40 acres.",
+        )
+    acres = float(match.group(1))
+    if acres <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Farming area must be greater than 0 acres.",
+        )
+    return {**custom_thresholds, "area": f"{acres:.1f} acres"}
+
+
+def normalize_create_site_type(site_type: str) -> str:
+    normalized = site_type.strip().lower().replace("-", "_")
+    resolved = SITE_TYPE_ALIASES.get(normalized)
+    if not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Site type must be Pond or Swimming Pool.",
+        )
+    return resolved
 
 class AgentUpdate(BaseModel):
     full_name: str | None = None
@@ -400,7 +475,43 @@ def delete_agent(
     )
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    db.execute(delete(Alert).where(Alert.recipient_user_id == agent.id))
+
+    agent_alert_ids = select(Alert.id).where(or_(Alert.recipient_user_id == agent.id, Alert.agent_user_id == agent.id))
+    agent_emergency_ids = select(EmergencyIncident.id).where(
+        or_(
+            EmergencyIncident.triggered_by_user_id == agent.id,
+            EmergencyIncident.accepted_by_user_id == agent.id,
+            EmergencyIncident.resolved_by_user_id == agent.id,
+        )
+    )
+
+    db.execute(
+        delete(NotificationDelivery).where(
+            or_(
+                NotificationDelivery.recipient_user_id == agent.id,
+                NotificationDelivery.alert_id.in_(agent_alert_ids),
+                NotificationDelivery.emergency_id.in_(agent_emergency_ids),
+            )
+        )
+    )
+    db.execute(delete(Alert).where(or_(Alert.recipient_user_id == agent.id, Alert.agent_user_id == agent.id)))
+    db.execute(
+        update(EmergencyIncident)
+        .where(EmergencyIncident.accepted_by_user_id == agent.id)
+        .values(accepted_by_user_id=None, accepted_at=None)
+    )
+    db.execute(
+        update(EmergencyIncident)
+        .where(EmergencyIncident.resolved_by_user_id == agent.id)
+        .values(resolved_by_user_id=None)
+    )
+    db.execute(delete(EmergencyIncident).where(EmergencyIncident.triggered_by_user_id == agent.id))
+    db.execute(delete(AgentContact).where(AgentContact.agent_user_id == agent.id))
+    db.execute(delete(PushSubscription).where(PushSubscription.user_id == agent.id))
+    db.execute(delete(ReportSchedule).where(ReportSchedule.user_id == agent.id))
+    db.execute(delete(Report).where(Report.user_id == agent.id))
+    db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == agent.id))
+    db.execute(delete(UserSetting).where(UserSetting.user_id == agent.id))
     db.execute(delete(SiteAgentAssignment).where(SiteAgentAssignment.agent_user_id == agent.id))
     db.delete(agent)
     db.commit()

@@ -2,20 +2,26 @@ from datetime import datetime
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.db import get_db
 from app.deps import require_role
 from app.models import (
+    AgentContact,
     Alert,
     Device,
     DeviceOwnerAssignment,
     DeviceSensorAssignment,
     DeviceSiteAssignment,
+    EmergencyIncident,
+    NotificationDelivery,
+    PasswordResetToken,
+    PushSubscription,
     Reading,
     Report,
+    ReportSchedule,
     Site,
     SiteAgentAssignment,
     User,
@@ -117,13 +123,19 @@ def manager_overview(
     current_user: User = Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    owner_count = db.scalar(select(func.count()).select_from(User).where(User.role == "owner")) or 0
+    owner_count = db.scalar(
+        select(func.count()).select_from(User).where(User.role == "owner", User.is_active.is_(True))
+    ) or 0
     agent_count = db.scalar(select(func.count()).select_from(User).where(User.role == "agent")) or 0
     device_count = db.scalar(select(func.count()).select_from(Device)) or 0
     site_count = db.scalar(select(func.count()).select_from(Site)) or 0
     open_alert_count = db.scalar(select(func.count()).select_from(Alert).where(Alert.status == "open")) or 0
 
-    owners = db.scalars(select(User).where(User.role == "owner").order_by(User.created_at.desc())).all()
+    owners = db.scalars(
+        select(User)
+        .where(User.role == "owner", User.is_active.is_(True))
+        .order_by(User.created_at.desc())
+    ).all()
     devices = db.scalars(select(Device).order_by(Device.created_at.desc())).all()
     alerts = manager_alerts_from_table(db)[:10]
 
@@ -178,7 +190,11 @@ def list_owners(
     current_user: User = Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    owners = db.scalars(select(User).where(User.role == "owner").order_by(User.created_at.desc())).all()
+    owners = db.scalars(
+        select(User)
+        .where(User.role == "owner", User.is_active.is_(True))
+        .order_by(User.created_at.desc())
+    ).all()
     return [UserOut.model_validate(item) for item in owners]
 
 
@@ -215,21 +231,81 @@ def delete_owner(
     if not owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found")
 
-    agent_ids = db.scalars(select(User.id).where(User.owner_user_id == owner_id, User.role == "agent")).all()
-    site_ids = db.scalars(select(Site.id).where(Site.owner_user_id == owner_id)).all()
-    device_ids = db.scalars(select(Device.id).where(Device.owner_user_id == owner_id)).all()
-    user_ids = [owner_id, *agent_ids]
+    owner_agent_ids = select(User.id).where(User.owner_user_id == owner.id, User.role == "agent")
+    owner_site_ids = select(Site.id).where(Site.owner_user_id == owner.id)
+    owner_device_ids = select(Device.id).where(
+        or_(Device.owner_user_id == owner.id, Device.site_id.in_(owner_site_ids))
+    )
+    owner_alert_ids = select(Alert.id).where(
+        or_(
+            Alert.owner_user_id == owner.id,
+            Alert.agent_user_id.in_(owner_agent_ids),
+            Alert.recipient_user_id == owner.id,
+            Alert.recipient_user_id.in_(owner_agent_ids),
+            Alert.site_id.in_(owner_site_ids),
+        )
+    )
+    owner_emergency_ids = select(EmergencyIncident.id).where(
+        or_(
+            EmergencyIncident.triggered_by_user_id == owner.id,
+            EmergencyIncident.triggered_by_user_id.in_(owner_agent_ids),
+            EmergencyIncident.accepted_by_user_id == owner.id,
+            EmergencyIncident.accepted_by_user_id.in_(owner_agent_ids),
+            EmergencyIncident.resolved_by_user_id == owner.id,
+            EmergencyIncident.resolved_by_user_id.in_(owner_agent_ids),
+            EmergencyIncident.site_id.in_(owner_site_ids),
+        )
+    )
 
-    db.execute(delete(Alert).where(or_(Alert.owner_user_id == owner_id, Alert.recipient_user_id.in_(user_ids), Alert.agent_user_id.in_(agent_ids), Alert.device_id.in_(device_ids), Alert.site_id.in_(site_ids))))
-    db.execute(delete(Reading).where(or_(Reading.device_id.in_(device_ids), Reading.site_id.in_(site_ids))))
-    db.execute(delete(DeviceSiteAssignment).where(or_(DeviceSiteAssignment.device_id.in_(device_ids), DeviceSiteAssignment.site_id.in_(site_ids))))
-    db.execute(delete(DeviceOwnerAssignment).where(or_(DeviceOwnerAssignment.device_id.in_(device_ids), DeviceOwnerAssignment.owner_user_id == owner_id)))
-    db.execute(delete(SiteAgentAssignment).where(or_(SiteAgentAssignment.site_id.in_(site_ids), SiteAgentAssignment.agent_user_id.in_(agent_ids))))
-    db.execute(delete(Device).where(Device.id.in_(device_ids)))
-    db.execute(delete(Site).where(Site.id.in_(site_ids)))
-    db.execute(delete(Report).where(Report.user_id.in_(user_ids)))
-    db.execute(delete(UserSetting).where(UserSetting.user_id.in_(user_ids)))
-    db.execute(delete(User).where(User.id.in_(agent_ids)))
+    db.execute(
+        delete(NotificationDelivery).where(
+            or_(
+                NotificationDelivery.recipient_user_id == owner.id,
+                NotificationDelivery.recipient_user_id.in_(owner_agent_ids),
+                NotificationDelivery.alert_id.in_(owner_alert_ids),
+                NotificationDelivery.emergency_id.in_(owner_emergency_ids),
+            )
+        )
+    )
+    db.execute(delete(Alert).where(Alert.id.in_(owner_alert_ids)))
+    db.execute(delete(EmergencyIncident).where(EmergencyIncident.id.in_(owner_emergency_ids)))
+    db.execute(delete(Reading).where(Reading.site_id.in_(owner_site_ids)))
+    db.execute(
+        delete(DeviceSiteAssignment).where(
+            or_(
+                DeviceSiteAssignment.site_id.in_(owner_site_ids),
+                DeviceSiteAssignment.device_id.in_(owner_device_ids),
+            )
+        )
+    )
+    db.execute(
+        delete(DeviceOwnerAssignment).where(
+            or_(
+                DeviceOwnerAssignment.owner_user_id == owner.id,
+                DeviceOwnerAssignment.device_id.in_(owner_device_ids),
+            )
+        )
+    )
+    db.execute(
+        delete(SiteAgentAssignment).where(
+            or_(
+                SiteAgentAssignment.site_id.in_(owner_site_ids),
+                SiteAgentAssignment.agent_user_id.in_(owner_agent_ids),
+                SiteAgentAssignment.assigned_by_owner_id == owner.id,
+            )
+        )
+    )
+    db.execute(update(Device).where(Device.id.in_(owner_device_ids)).values(owner_user_id=None, site_id=None, status="inactive"))
+    db.execute(delete(Site).where(Site.id.in_(owner_site_ids)))
+
+    db.execute(delete(AgentContact).where(AgentContact.agent_user_id.in_(owner_agent_ids)))
+    db.execute(delete(PushSubscription).where(or_(PushSubscription.user_id == owner.id, PushSubscription.user_id.in_(owner_agent_ids))))
+    db.execute(delete(ReportSchedule).where(or_(ReportSchedule.user_id == owner.id, ReportSchedule.user_id.in_(owner_agent_ids))))
+    db.execute(delete(Report).where(or_(Report.user_id == owner.id, Report.user_id.in_(owner_agent_ids))))
+    db.execute(delete(PasswordResetToken).where(or_(PasswordResetToken.user_id == owner.id, PasswordResetToken.user_id.in_(owner_agent_ids))))
+    db.execute(delete(UserSetting).where(or_(UserSetting.user_id == owner.id, UserSetting.user_id.in_(owner_agent_ids))))
+    db.execute(update(User).where(User.created_by_id == owner.id).values(created_by_id=None))
+    db.execute(delete(User).where(User.id.in_(owner_agent_ids)))
     db.delete(owner)
     db.commit()
     return {"message": "Owner deleted successfully"}
