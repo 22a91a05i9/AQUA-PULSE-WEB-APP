@@ -209,31 +209,8 @@ def create_site(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Site already created.")
 
     site_type = normalize_create_site_type(payload.site_type)
-    if site_type == "swimming_pool":
-        farm_type = db.scalar(select(FarmType).where(FarmType.code == "general"))
-        if not farm_type:
-            farm_type = FarmType(code="general", name="General")
-            db.add(farm_type)
-            db.flush()
-        species = db.scalar(
-            select(Species).where(
-                Species.farm_type_id == farm_type.id,
-                Species.name == "Swimming Pool",
-            )
-        )
-        if not species:
-            species = Species(
-                farm_type_id=farm_type.id,
-                name="Swimming Pool",
-                scientific_name=None,
-                default_thresholds={
-                    "ph": {"min": 7.2, "max": 7.8},
-                    "temperature_c": {"min": 20.0, "max": 32.0},
-                    "turbidity": {"min": 0.0, "max": 10.0},
-                },
-            )
-            db.add(species)
-            db.flush()
+    if site_type in GENERAL_SITE_DEFAULTS:
+        farm_type, species = get_or_create_general_site_species(db, site_type)
     if site_type == "pond":
         if payload.farm_type_id is None or payload.species_id is None:
             raise HTTPException(
@@ -348,9 +325,31 @@ PHONE_PATTERN = re.compile(r"^\d{10}$")
 AREA_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)\s*acres?$", re.IGNORECASE)
 SITE_TYPE_ALIASES = {
     "pond": "pond",
+    "aquarium": "aquarium",
+    "fish_tank": "aquarium",
+    "fish tank": "aquarium",
     "swimming_pool": "swimming_pool",
     "swimming pool": "swimming_pool",
     "pool": "swimming_pool",
+}
+GENERAL_SITE_DEFAULTS = {
+    "aquarium": {
+        "name": "Aquarium",
+        "thresholds": {
+            "ph": {"min": 6.8, "max": 8.0},
+            "temperature_c": {"min": 22.0, "max": 28.0},
+            "turbidity": {"min": 0.0, "max": 5.0},
+            "ammonia": {"min": 0.0, "max": 0.25},
+        },
+    },
+    "swimming_pool": {
+        "name": "Swimming Pool",
+        "thresholds": {
+            "ph": {"min": 7.2, "max": 7.8},
+            "temperature_c": {"min": 20.0, "max": 32.0},
+            "turbidity": {"min": 0.0, "max": 10.0},
+        },
+    },
 }
 
 
@@ -385,13 +384,39 @@ def normalize_site_area(custom_thresholds: dict | None) -> dict | None:
     return {**custom_thresholds, "area": f"{acres:.1f} acres"}
 
 
+def get_or_create_general_site_species(db: Session, site_type: str) -> tuple[FarmType, Species]:
+    defaults = GENERAL_SITE_DEFAULTS[site_type]
+    farm_type = db.scalar(select(FarmType).where(FarmType.code == "general"))
+    if not farm_type:
+        farm_type = FarmType(code="general", name="General")
+        db.add(farm_type)
+        db.flush()
+
+    species = db.scalar(
+        select(Species).where(
+            Species.farm_type_id == farm_type.id,
+            Species.name == defaults["name"],
+        )
+    )
+    if not species:
+        species = Species(
+            farm_type_id=farm_type.id,
+            name=defaults["name"],
+            scientific_name=None,
+            default_thresholds=defaults["thresholds"],
+        )
+        db.add(species)
+        db.flush()
+    return farm_type, species
+
+
 def normalize_create_site_type(site_type: str) -> str:
     normalized = site_type.strip().lower().replace("-", "_")
     resolved = SITE_TYPE_ALIASES.get(normalized)
     if not resolved:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Site type must be Pond or Swimming Pool.",
+            detail="Site type must be Pond, Swimming Pool, or Aquarium.",
         )
     return resolved
 

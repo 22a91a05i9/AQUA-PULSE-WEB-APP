@@ -46,6 +46,7 @@ const siteImage = '/images/dashboard_attached.png';
 function formatSiteType(siteType: string | null | undefined): string {
   const normalized = String(siteType || '').trim().toLowerCase();
   if (normalized === 'swimming_pool') return 'Swimming Pool';
+  if (normalized === 'aquarium') return 'Aquarium';
   if (normalized === 'pond') return 'Pond';
   if (!normalized) return 'Site';
   return normalized
@@ -565,6 +566,7 @@ export default function SitesPage() {
                   >
                     <option value="pond">Pond</option>
                     <option value="swimming_pool">Swimming Pool</option>
+                    <option value="aquarium">Aquarium</option>
                   </select>
                 </div>
                 {siteType === 'pond' && (

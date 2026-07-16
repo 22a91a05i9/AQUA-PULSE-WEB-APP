@@ -202,10 +202,6 @@ def send_emergency_sms(recipient: User, incident: EmergencyIncident, triggered_b
         _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="skipped", error_message="Emergency SMS is disabled.", emergency_id=incident.id)
         db.commit()
         return False
-    if not _pref_enabled(recipient, "sms_alerts", True):
-        _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="skipped", error_message="SMS notifications are disabled for this user.", emergency_id=incident.id)
-        db.commit()
-        return False
     if not to_phone:
         _record_delivery(db, recipient=recipient, channel="sms", subject=subject, status="skipped", error_message="Recipient has no valid phone number.", emergency_id=incident.id)
         db.commit()
@@ -252,7 +248,14 @@ def send_emergency_call(recipient: User, incident: EmergencyIncident, triggered_
         return False
 
     spoken_message = escape(
-        label("call_message", lang, name=triggered_by.full_name, site=site_name, priority=incident.priority.upper())
+        label(
+            "call_message",
+            lang,
+            name=triggered_by.full_name,
+            site=site_name,
+            priority=incident.priority.upper(),
+            description=incident.description,
+        )
     )
     repeat_message = escape(label("call_repeat", lang))
     voice_language = TWILIO_VOICE_LANGUAGE.get(lang, "en-IN")

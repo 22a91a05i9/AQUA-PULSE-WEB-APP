@@ -409,7 +409,7 @@ def apply_schema_patches(engine: Engine) -> None:
                     """
                     ALTER TABLE sites
                     ADD CONSTRAINT sites_site_type_check
-                    CHECK (site_type IN ('pond', 'lake', 'tank', 'hatchery', 'raceway', 'swimming_pool', 'other'))
+                    CHECK (site_type IN ('pond', 'lake', 'tank', 'hatchery', 'raceway', 'swimming_pool', 'aquarium', 'other'))
                     """
                 )
             )
