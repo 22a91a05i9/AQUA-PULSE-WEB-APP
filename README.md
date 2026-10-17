@@ -1,6 +1,6 @@
 # Aqua Pulse — Aquaculture Monitoring Platform
 
-Aqua Pulse is a role-based monitoring and operations platform built for aquaculture (pond/farm) operators. It provides real-time monitoring, device management, alerts and emergency flows, analytics, and scheduled reports. The project includes a React + TypeScript frontend and a FastAPI + SQLAlchemy backend, and is designed to run locally (SQLite) or in production using PostgreSQL, MQTT brokers, and container orchestration.
+Aqua Pulse is a role-based monitoring and operations platform built for aquaculture (pond/farm) operators. It provides real-time monitoring, device management, alerts and emergency flows, analytics[...]
 
 ---
 
@@ -108,8 +108,7 @@ TRUSTED_HOSTS=*
 
 ## Database & schema notes
 - Default development database: SQLite file `aqua_iot.db` at repository root.
-- On startup `backend/app/main.py` runs checks and will call schema patches and seed logic when the schema is present. There is also a `bootstrap_db.py` script to create initial tables and seed default manager/user data — check that file for explicit usage.
-- For production use PostgreSQL (set DATABASE_URL). Ensure `SECRET_KEY` and default credentials are changed for production (the config enforces this for `APP_ENV=production`).
+- On startup `backend/app/main.py` runs checks and will call schema patches and seed logic when the schema is present. There is also a `bootstrap_db.py` script to create initial tables and seed d[...]
 
 ---
 
@@ -176,4 +175,12 @@ For production, prefer:
 
 ## Contact & license
 - This repository currently does not include an explicit license file — add `LICENSE` to declare terms before publishing.
-- For questions about implementation details, check the router modules in `backend/app/routers/` and the UI pages in `Frontend/src/Agent-Page`, `Frontend/src/Manager-Page`, and `Frontend/src/Owner-Page`.
+- For questions about implementation details, check the router modules in `backend/app/routers/` and the UI pages in `Frontend/src/Agent-Page`, `Frontend/src/Manager-Page`, and `Frontend/src/Owne[...]`
+
+### Contact
+- Resume: [Google Drive Resume](https://drive.google.com/file/d/1kVaFitO_zDKzW4gZWNO7dWN5UdSd5Q2I/view?usp=sharing)
+- LinkedIn: https://www.linkedin.com/in/lokanadham-jyoshnavi-621a77254/
+- Email: josh8jyoshnaviclk@gmail.com
+
+---
+
